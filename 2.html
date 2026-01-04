@@ -59,7 +59,7 @@
              background-color: #ff6666;
              transform: scale(1.05);
          }
-         .verify-container, .password-container {
+         .password-container {
              display: none;
              position: fixed;
              top: 50%;
@@ -71,33 +71,6 @@
              z-index: 1001;
              text-align: center;
              box-shadow: 0 0 20px rgba(0, 204, 255, 0.3);
-         }
-         .verify-slider {
-             width: 300px;
-             height: 50px;
-             background-color: #444;
-             border-radius: 25px;
-             margin: 20px 0;
-             position: relative;
-             overflow: hidden;
-         }
-         .verify-btn {
-             position: absolute;
-             top: 0;
-             left: 0;
-             width: 50px;
-             height: 100%;
-             background-color: #00ccff;
-             border-radius: 25px;
-             cursor: pointer;
-             transition: left 0.1s ease;
-         }
-         .verify-text {
-             position: absolute;
-             top: 50%;
-             left: 50%;
-             transform: translate(-50%, -50%);
-             color: #fff;
          }
          input {
              padding: 10px;
@@ -246,14 +219,6 @@
          <div class="age-title">未满18岁禁止入内</div>
          <button class="enter-btn" id="enterBtn">点击进入（需密码）</button>
      </div>
-     <div class="verify-container" id="verifyContainer">
-         <h3>请完成人机验证</h3>
-         <div class="verify-slider" id="verifySlider">
-             <div class="verify-btn" id="verifyBtn"></div>
-             <div class="verify-text">拖动滑块完成验证</div>
-         </div>
-         <div class="error-text" id="verifyError">验证失败，请重新拖动</div>
-     </div>
      <div class="password-container" id="initPwdContainer">
          <h3>输入进入密码</h3>
          <input type="password" id="initPwdInput" placeholder="请输入密码">
@@ -266,9 +231,9 @@
              <h2>国产大片</h2>
              <button class="category-btn" id="chinaBtn">点击解锁（需密码）</button>
              <div class="video-grid" id="chinaGrid">
-                 <div class="video-item" data-video="李宇轩恶霸.MP4" data-thumb="https://clrvai.com/Cloud_Drive/e5c6d4fa5896db6d4079c9da911da126.png">
+                 <div class="video-item" data-video="202417001.github.io/2/李宇轩恶霸.MP4" data-thumb="https://clrvai.com/Cloud_Drive/e5c6d4fa5896db6d4079c9da911da126.png">
                      <div class="video-thumb" style="background-image: url('thumb1.jpg')"></div>
-                     <div class="video-title">国产大片 - 示例视频1</div>
+                     <div class="video-title">恶霸欺负我的女朋友怎么办？</div>
                  </div>
                  <div class="video-item" data-video="国产大片2.mp4" data-thumb="thumb2.jpg">
                      <div class="video-thumb" style="background-image: url('thumb2.jpg')"></div>
@@ -283,7 +248,7 @@
                  <div class="video-item" data-video="欧美大片1.mp4" data-thumb="thumb3.jpg">
                      <div class="video-thumb" style="background-image: url('thumb3.jpg')"></div>
                      <div class="video-title">欧美大片 - 示例视频1</div>
-                 </div>
+</div>
                  <div class="video-item" data-video="欧美大片2.mp4" data-thumb="thumb4.jpg">
                      <div class="video-thumb" style="background-image: url('thumb4.jpg')"></div>
                      <div class="video-title">欧美大片 - 示例视频2</div>
@@ -359,10 +324,6 @@
          let pwdLeft = 5;
          const ageRestrict = document.getElementById("ageRestrict");
          const enterBtn = document.getElementById("enterBtn");
-         const verifyContainer = document.getElementById("verifyContainer");
-         const verifySlider = document.getElementById("verifySlider");
-         const verifyBtn = document.getElementById("verifyBtn");
-         const verifyError = document.getElementById("verifyError");
          const initPwdContainer = document.getElementById("initPwdContainer");
          const initPwdInput = document.getElementById("initPwdInput");
          const initPwdBtn = document.getElementById("initPwdBtn");
@@ -393,33 +354,7 @@
          const saturationSlider = document.getElementById("saturationSlider");
          enterBtn.addEventListener("click", () => {
              ageRestrict.style.display = "none";
-             verifyContainer.style.display = "block";
-         });
-         let isDragging = false;
-         verifyBtn.addEventListener("mousedown", (e) => {
-             isDragging = true;
-e.preventDefault();
-         });
-         document.addEventListener("mousemove", (e) => {
-             if (!isDragging) return;
-             const sliderRect = verifySlider.getBoundingClientRect();
-             let x = e.clientX - sliderRect.left - verifyBtn.offsetWidth / 2;
-             x = Math.max(0, Math.min(x, sliderRect.width - verifyBtn.offsetWidth));
-             verifyBtn.style.left = x + "px";
-         });
-         document.addEventListener("mouseup", () => {
-             if (!isDragging) return;
-             isDragging = false;
-             if (parseInt(verifyBtn.style.left) >= verifySlider.offsetWidth - verifyBtn.offsetWidth - 10) {
-                 verifyContainer.style.display = "none";
-                 initPwdContainer.style.display = "block";
-             } else {
-                 verifyError.style.display = "block";
-                 setTimeout(() => {
-                     verifyBtn.style.left = "0";
-                     verifyError.style.display = "none";
-                 }, 1000);
-             }
+             initPwdContainer.style.display = "block";
          });
          initPwdBtn.addEventListener("click", () => {
              if (initPwdInput.value === DEFAULT_PWD) {
