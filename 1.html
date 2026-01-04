@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>年龄验证跳转页</title>
+    <style>
+        /* 全局居中样式 */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+            font-family: Arial, sans-serif;
+        }
+
+        /* 截图提示文字样式 */
+        .tip-text {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ff0000;
+            margin-bottom: 30px;
+        }
+
+        /* 警告文字样式 */
+        .warning-text {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 20px;
+        }
+
+        /* 跳转按钮样式 + 彩色闪烁动画 */
+        .jump-btn {
+            padding: 15px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            /* 绑定闪烁动画 */
+            animation: colorFlash 1s infinite alternate;
+            text-decoration: none;
+        }
+
+        /* 定义彩色循环动画 */
+        @keyframes colorFlash {
+            0% { background-color: #ff0000; color: #ffffff; }
+            25% { background-color: #00ff00; color: #000000; }
+            50% { background-color: #0000ff; color: #ffffff; }
+            75% { background-color: #ffff00; color: #000000; }
+            100% { background-color: #ff00ff; color: #ffffff; }
+        }
+    </style>
+</head>
+<body>
+    <!-- 截图提示文字 -->
+    <div class="tip-text">↑↑↑請截圖最新網址到相冊↑↑↑</div>
+
+    <!-- 年龄警告文字 -->
+    <div class="warning-text">警告！本網站只適合年滿18歲之成人！</div>
+
+    <!-- 跳转按钮：点击跳转到全国征兵网 -->
+    <a href="https://www.gfbzb.gov.cn/" class="jump-btn" target="_blank">滿18歲點擊進入</a>
+</body>
+</html>
