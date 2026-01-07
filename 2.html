@@ -233,39 +233,11 @@
              <div class="video-grid" id="chinaGrid">
                  <div class="video-item" data-video="https://202417001.github.io/2/李宇轩.MP4" data-thumb="https://clrvai.com/Cloud_Drive/e5c6d4fa5896db6d4079c9da911da126.png">
                      <div class="video-thumb" style="background-image: url('https://clrvai.com/Cloud_Drive/e5c6d4fa5896db6d4079c9da911da126.png')"></div>
-                     <div class="video-title">恶霸欺负我的女朋友怎么办？</div>
+                     <div class="video-title">国产大片 - 示例视频1</div>
                  </div>
                  <div class="video-item" data-video="国产大片2.mp4" data-thumb="thumb2.jpg">
                      <div class="video-thumb" style="background-image: url('thumb2.jpg')"></div>
                      <div class="video-title">国产大片 - 示例视频2</div>
-                 </div>
-             </div>
-         </div>
-         <div class="category">
-             <h2>欧美大片</h2>
-             <button class="category-btn" id="europeBtn">点击解锁（需5次密码）</button>
-             <div class="video-grid" id="europeGrid">
-                 <div class="video-item" data-video="欧美大片1.mp4" data-thumb="thumb3.jpg">
-                     <div class="video-thumb" style="background-image: url('thumb3.jpg')"></div>
-                     <div class="video-title">欧美大片 - 示例视频1</div>
-</div>
-                 <div class="video-item" data-video="欧美大片2.mp4" data-thumb="thumb4.jpg">
-                     <div class="video-thumb" style="background-image: url('thumb4.jpg')"></div>
-                     <div class="video-title">欧美大片 - 示例视频2</div>
-                 </div>
-             </div>
-         </div>
-         <div class="category">
-             <h2>日本娇妻</h2>
-             <button class="category-btn" id="japanBtn">点击解锁（需5次密码）</button>
-             <div class="video-grid" id="japanGrid">
-                 <div class="video-item" data-video="日本影片1.mp4" data-thumb="thumb5.jpg">
-                     <div class="video-thumb" style="background-image: url('thumb5.jpg')"></div>
-                     <div class="video-title">日本影片 - 示例视频1</div>
-                 </div>
-                 <div class="video-item" data-video="日本影片2.mp4" data-thumb="thumb6.jpg">
-                     <div class="video-thumb" style="background-image: url('thumb6.jpg')"></div>
-                     <div class="video-title">日本影片 - 示例视频2</div>
                  </div>
              </div>
          </div>
@@ -276,14 +248,7 @@
          <br>
          <button class="submit-btn" id="chinaPwdBtn">提交</button>
          <div class="error-text" id="chinaPwdError">密码错误</div>
-     </div>
-     <div class="password-container" id="multiPwdContainer">
-         <h3>输入密码（剩余 <span id="pwdCount">5</span> 次）</h3>
-         <input type="password" id="multiPwdInput" placeholder="请输入密码">
-         <br>
-         <button class="submit-btn" id="multiPwdBtn">提交</button>
-         <div class="error-text" id="multiPwdError">密码错误</div>
-     </div>
+</div>
      <div class="player-page" id="playerPage">
          <button class="back-btn" id="backBtn">返回视频列表</button>
          <video class="video-player" id="videoPlayer" controls>
@@ -319,9 +284,8 @@
          </div>
      </div>
      <script>
-         const DEFAULT_PWD = "123456";
+         const DEFAULT_PWD = "20260107";
          let currentCategory = "";
-         let pwdLeft = 5;
          const ageRestrict = document.getElementById("ageRestrict");
          const enterBtn = document.getElementById("enterBtn");
          const initPwdContainer = document.getElementById("initPwdContainer");
@@ -330,20 +294,11 @@
          const initPwdError = document.getElementById("initPwdError");
          const videoList = document.getElementById("videoList");
          const chinaBtn = document.getElementById("chinaBtn");
-         const europeBtn = document.getElementById("europeBtn");
-         const japanBtn = document.getElementById("japanBtn");
          const chinaGrid = document.getElementById("chinaGrid");
-         const europeGrid = document.getElementById("europeGrid");
-         const japanGrid = document.getElementById("japanGrid");
          const chinaPwdContainer = document.getElementById("chinaPwdContainer");
          const chinaPwdInput = document.getElementById("chinaPwdInput");
          const chinaPwdBtn = document.getElementById("chinaPwdBtn");
          const chinaPwdError = document.getElementById("chinaPwdError");
-         const multiPwdContainer = document.getElementById("multiPwdContainer");
-         const multiPwdInput = document.getElementById("multiPwdInput");
-         const multiPwdBtn = document.getElementById("multiPwdBtn");
-         const pwdCount = document.getElementById("pwdCount");
-         const multiPwdError = document.getElementById("multiPwdError");
          const playerPage = document.getElementById("playerPage");
          const backBtn = document.getElementById("backBtn");
          const videoPlayer = document.getElementById("videoPlayer");
@@ -370,18 +325,6 @@
              currentCategory = "china";
              chinaPwdContainer.style.display = "block";
          });
-         europeBtn.addEventListener("click", () => {
-             currentCategory = "europe";
-             pwdLeft = 5;
-             pwdCount.textContent = pwdLeft;
-             multiPwdContainer.style.display = "block";
-         });
-         japanBtn.addEventListener("click", () => {
-             currentCategory = "japan";
-             pwdLeft = 5;
-             pwdCount.textContent = pwdLeft;
-             multiPwdContainer.style.display = "block";
-         });
          chinaPwdBtn.addEventListener("click", () => {
              if (chinaPwdInput.value === DEFAULT_PWD) {
                  chinaPwdContainer.style.display = "none";
@@ -391,22 +334,6 @@
                  setTimeout(() => chinaPwdError.style.display = "none", 1500);
              }
              chinaPwdInput.value = "";
-         });
-         multiPwdBtn.addEventListener("click", () => {
-             if (multiPwdInput.value === DEFAULT_PWD) {
-                 multiPwdContainer.style.display = "none";
-                 currentCategory === "europe" ? europeGrid.style.display = "grid" : japanGrid.style.display = "grid";
-             } else {
-                 pwdLeft--;
-                 pwdCount.textContent = pwdLeft;
-                 multiPwdError.style.display = "block";
-                 setTimeout(() => multiPwdError.style.display = "none", 1500);
-                 if (pwdLeft <= 0) {
-                     alert("密码输入次数用完，返回列表");
-                     multiPwdContainer.style.display = "none";
-                 }
-             }
-             multiPwdInput.value = "";
          });
          document.querySelectorAll(".video-item").forEach(item => {
              item.addEventListener("click", () => {
