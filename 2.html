@@ -31,29 +31,26 @@
             font-family: 'Ma Shan Zheng', cursive;
             font-size: 80px;
             color: #fff;
+            opacity: 0;
+            animation-duration: 1.5s;
+            animation-fill-mode: forwards;
             text-align: center;
-            overflow: hidden;
-            white-space: nowrap;
-            position: relative;
         }
         .text1 {
-            width: 0;
-            animation: writeHello 3s steps(2) forwards;
+            animation-name: showHello;
         }
         .text2 {
-            width: 0;
-            font-size: 40px;
-            margin-top: 40px;
-            animation: writeWelcome 8s steps(50) forwards;
-            animation-delay: 4s;
+            animation-name: showWelcome;
+            animation-delay: 2s;
         }
-        @keyframes writeHello {
-            from { width: 0; }
-            to { width: 1.6em; }
+        @keyframes showHello {
+            0% { opacity: 0; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1.2); }
+            100% { opacity: 0; transform: scale(0.8); }
         }
-        @keyframes writeWelcome {
-            from { width: 0; }
-            to { width: 100%; }
+        @keyframes showWelcome {
+            0% { opacity: 0; transform: translateY(20px); }
+            100% { opacity: 1; transform: translateY(0); }
         }
         body {
             background-color: #1a1a1a;
