@@ -31,31 +31,48 @@
             font-family: 'Ma Shan Zheng', cursive;
             font-size: 80px;
             color: #fff;
-            opacity: 0;
-            animation-duration: 1.5s;
-            animation-fill-mode: forwards;
             text-align: center;
+            overflow: hidden;
+            white-space: nowrap;
+            position: relative;
         }
         .text1 {
-            animation-name: showHello;
+            width: 0;
+            animation: writeHello 3s steps(2) forwards;
         }
         .text2 {
-            animation-name: showWelcome;
-            animation-delay: 2s;
+            width: 0;
+            font-size: 40px;
+            margin-top: 40px;
+            animation: writeWelcome 8s steps(50) forwards;
+            animation-delay: 4s;
         }
-        @keyframes showHello {
-            0% { opacity: 0; transform: scale(0.8); }
-            50% { opacity: 1; transform: scale(1.2); }
-            100% { opacity: 0; transform: scale(0.8); }
+        @keyframes writeHello {
+            from { width: 0; }
+            to { width: 1.6em; }
         }
-        @keyframes showWelcome {
-            0% { opacity: 0; transform: translateY(20px); }
-            100% { opacity: 1; transform: translateY(0); }
+        @keyframes writeWelcome {
+            from { width: 0; }
+            to { width: 100%; }
+        }
+        /* 公告栏样式 */
+        .notice-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background-color: #ff3333;
+            color: #fff;
+            text-align: center;
+            padding: 12px 0;
+            font-size: 16px;
+            z-index: 999;
         }
         body {
             background-color: #1a1a1a;
             color: #fff;
             overflow-x: hidden;
+            padding-top: 44px;
         }
         .age-restrict {
             position: fixed;
@@ -267,6 +284,11 @@
         </div>
     </div>
 
+    <!-- 公告栏 -->
+    <div class="notice-bar">
+        某有些人连准备都不会准备，最菜的图杀了两个人
+    </div>
+
     <div class="age-restrict" id="ageRestrict">
         <div class="age-title">未满18岁禁止入内</div>
         <button class="enter-btn" id="enterBtn">点击进入（需密码）</button>
@@ -341,7 +363,6 @@
     </div>
 
     <script>
-        // 密码为今天的日期：20241026（格式：年月日），修改时直接替换引号内数字即可
         const DEFAULT_PWD = "20241026";
         let currentCategory = "";
 
@@ -368,7 +389,6 @@
         const contrastSlider = document.getElementById("contrastSlider");
         const saturationSlider = document.getElementById("saturationSlider");
 
-        // 点击任意位置关闭开场动画
         startAnime.addEventListener("click", () => {
             startAnime.style.display = "none";
         });
