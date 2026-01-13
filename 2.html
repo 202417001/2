@@ -286,7 +286,7 @@
 
     <!-- 公告栏 -->
     <div class="notice-bar">
-        还有最后7天就要考试了，祝大家期末考个好成绩，过个好年！
+        还有最后7天就要考试了，祝大家期末考个好成绩，过个好年！距离考试还有：<span id="countdown"></span>
     </div>
 
     <div class="age-restrict" id="ageRestrict">
@@ -367,6 +367,34 @@
     </div>
 
     <script>
+        // 1月20号倒计时函数
+function updateCountdown() {
+    // 获取当前日期
+    const now = new Date();
+    // 设置目标日期：1月20日，若今年已过则自动切换到明年
+    let targetYear = now.getFullYear();
+    const targetDate = new Date(targetYear, 0, 20); // 月份是0开始，0=1月
+    
+    // 如果当前日期已过1月20日，目标年份改为明年
+    if (now > targetDate) {
+        targetDate.setFullYear(targetYear + 1);
+    }
+
+    // 计算时间差（毫秒）
+    const diff = targetDate - now;
+    // 转换为天、时、分、秒
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+    // 显示到页面
+    document.getElementById("countdown").textContent = `${days}天 ${hours}时 ${minutes}分 ${seconds}秒`;
+}
+
+// 页面加载时立即执行一次，之后每秒更新一次
+updateCountdown();
+setInterval(updateCountdown, 1000);
         const DEFAULT_PWD = "20260113";
         let currentCategory = "";
 
