@@ -56,7 +56,7 @@ app.post('/api/sendCode', async (req, res) => {
         const { email } = req.body;
         const code = Math.floor(100000 + Math.random() * 900000).toString();
         await transporter.sendMail({
-            from: '南部中学表白墙 <你的QQ邮箱@qq.com>',
+            from: '南部中学表白墙 <@3784375297@qq.com>',
             to: email,
             subject: '表白墙注册验证码',
             text: `你的注册验证码是：${code}，有效期10分钟，请勿泄露给他人`
