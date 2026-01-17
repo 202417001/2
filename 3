@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>南部中学表白墙</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+        body {
+            background-color: #f5f7fa;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            width: 100%;
+            height: 60px;
+            background-color: #4285f4;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 22px;
+            font-weight: bold;
+        }
+        .content {
+            width: 100%;
+            max-width: 800px;
+            margin: 20px auto;
+            flex: 1;
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            display: none;
+        }
+        .content.active {
+            display: block;
+        }
+        .nav {
+            width: 100%;
+            height: 50px;
+            background-color: white;
+            display: flex;
+            border-top: 1px solid #eee;
+        }
+        .nav-btn {
+            flex: 1;
+            height: 100%;
+            border: none;
+            background-color: transparent;
+            font-size: 16px;
+            color: #666;
+            cursor: pointer;
+        }
+        .nav-btn.active {
+            color: #4285f4;
+            border-top: 2px solid #4285f4;
+        }
+        .school-img {
+            width: 100%;
+            height: 200px;
+            border-radius: 6px;
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+        .school-img img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .plate-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .plate {
+            flex: 1;
+            min-width: 160px;
+            height: 120px;
+            background-color: #f0f7ff;
+            border: 1px solid #e1f0ff;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #2d7ff9;
+            font-size: 18px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .plate:hover {
+            background-color: #e1f0ff;
+        }
+        .grade-tab {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        .grade-btn {
+            flex: 1;
+            height: 40px;
+            border: none;
+            background-color: transparent;
+            font-size: 16px;
+            color: #666;
+            cursor: pointer;
+        }
+        .grade-btn.active {
+            color: #4285f4;
+            border-bottom: 2px solid #4285f4;
+        }
+        .publish-form {
+            background-color: #f9f9f9;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .publish-input {
+            width: 100%;
+            height: 80px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            padding: 10px;
+            resize: none;
+            margin-bottom: 10px;
+        }
+        .file-upload {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .upload-btn {
+            padding: 6px 12px;
+            border: 1px solid #4285f4;
+            border-radius: 4px;
+            color: #4285f4;
+            background-color: transparent;
+            cursor: pointer;
+        }
+        .submit-btn {
+            width: 100%;
+            height: 36px;
+            border: none;
+            border-radius: 4px;
+            background-color: #4285f4;
+            color: white;
+            cursor: pointer;
+        }
+        .confession-list {
+            gap: 15px;
+            display: flex;
+            flex-direction: column;
+        }
+        .confession-item {
+            padding: 15px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            position: relative;
+        }
+        .more-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 24px;
+            height: 24px;
+            border: none;
+            background-color: transparent;
+            font-size: 20px;
+            color: #999;
+            cursor: pointer;
+            line-height: 24px;
+        }
+        .more-menu {
+            position: absolute;
+            top: 35px;
+            right: 15px;
+            width: 100px;
+            background-color: white;
+            border: 1px solid #eee;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            display: none;
+        }
+        .more-menu.show {
+            display: block;
+        }
+        .delete-btn {
+            width: 100%;
+            height: 30px;
+            border: none;
+            background-color: transparent;
+            color: #ff4444;
+            cursor: pointer;
+        }
+        .confession-media {
+            width: 100%;
+            max-height: 300px;
+            border-radius: 4px;
+            margin: 10px 0;
+            object-fit: cover;
+        }
+        .confession-opt {
+            display: flex;
+            gap: 20px;
+            margin-top: 10px;
+        }
+        .opt-btn {
+            border: none;
+            background-color: transparent;
+            color: #666;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .confession-content {
+            margin-bottom: 10px;
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+        }
+        .modal-content {
+            width: 300px;
+            background-color: white;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+        }
+        .modal-btn {
+            width: 100px;
+            height: 36px;
+            border: none;
+            border-radius: 4px;
+            background-color: #4285f4;
+            color: white;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        .msg-category {
+            margin-bottom: 20px;
+        }
+        .msg-category h3 {
+            font-size: 18px;
+            color: #333;
+            margin-bottom: 10px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        .msg-time {
+            font-size: 12px;
+            color: #999;
+            margin-top: 5px;
+        }
+        /* 登录注册表单样式 */
+        .auth-form {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-title {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .form-switch {
+            text-align: center;
+            margin-bottom: 15px;
+            color: #666;
+        }
+        .form-switch span {
+            color: #4285f4;
+            cursor: pointer;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        .form-input {
+            width: 100%;
+            height: 40px;
+            padding: 0 10px;
+            border: 1px solid #eee;
+            border-radius: 4px;
+        }
+        .code-group {
+            display: flex;
+            gap: 10px;
+        }
+        .code-input {
+            flex: 1;
+        }
+        .send-code-btn {
+            width: 120px;
+            background-color: #2d7ff9;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .logout-btn {
+            width: 100%;
+            height: 40px;
+            background-color: #ff4444;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 20px;
+            display: none;
+        }
+        .user-info-login {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        .user-info-login img {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            background-color: #eee;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">南部中学表白墙</div>
+    <div id="home" class="content active">
+        <div class="school-img">
+            <img src="https://picsum.photos/800/200?school" alt="南部中学校园风景">
+        </div>
+        <div class="plate-container">
+            <div class="plate" onclick="switchPage('confession')">表白墙</div>
+            <div class="plate" onclick="showNotDeveloped()">申请管理</div>
+            <div class="plate" onclick="showNotDeveloped()">bug反馈</div>
+            <div class="plate" onclick="showNotDeveloped()">赞助</div>
+        </div>
+    </div>
+    <div id="confession" class="content">
+        <div class="grade-tab">
+            <button class="grade-btn active" onclick="switchGrade('junior')">初中</button>
+            <button class="grade-btn" onclick="switchGrade('senior')">高中</button>
+        </div>
+        <div class="publish-form">
+            <textarea class="publish-input" placeholder="输入你的表白内容..."></textarea>
+            <div class="file-upload">
+                <input type="file" id="fileInput" accept="image/*,video/*" hidden>
+                <button class="upload-btn" onclick="document.getElementById('fileInput').click()">上传图片/视频</button>
+            </div>
+            <button class="submit-btn">发布表白</button>
+        </div>
+        <div class="confession-list">
+            <div class="confession-item">
+                <button class="more-btn" onclick="toggleMenu(this)">⋮</button>
+                <div class="more-menu">
+                    <button class="delete-btn" onclick="checkAdmin()">删除内容</button>
+                </div>
+                <div class="confession-content">初中部的同学太可爱啦！</div>
+                <img src="https://picsum.photos/400/200?student" class="confession-media" alt="配图">
+                <div class="confession-opt">
+                    <button class="opt-btn" onclick="checkLogin('like')">👍 点赞</button>
+                    <button class="opt-btn" onclick="checkLogin('reply')">💬 回复</button>
+                </div>
+            </div>
+            <div class="confession-item">
+                <button class="more-btn" onclick="toggleMenu(this)">⋮</button>
+                <div class="more-menu">
+                    <button class="delete-btn" onclick="checkAdmin()">删除内容</button>
+                </div>
+                <div class="confession-content">高中部篮球赛超精彩！</div>
+                <video class="confession-media" controls src="https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.mp4"></video>
+                <div class="confession-opt">
+                    <button class="opt-btn" onclick="checkLogin('like')">👍 点赞</button>
+                    <button class="opt-btn" onclick="checkLogin('reply')">💬 回复</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="msg" class="content">
+        <div class="msg-category">
+            <h3>点赞通知</h3>
+            <div class="msg-item">
+                <p>用户「匿名同学」点赞了你的表白：“初中部的同学太可爱啦！”</p>
+                <div class="msg-time">10分钟前</div>
+            </div>
+            <div class="msg-item">
+                <p>用户「篮球爱好者」点赞了你的表白：“高中部篮球赛超精彩！”</p>
+                <div class="msg-time">1小时前</div>
+            </div>
+        </div>
+        <div class="msg-category">
+            <h3>回复通知</h3>
+            <div class="msg-item">
+                <p>用户「小太阳」回复了你的表白：“我也觉得初中部氛围超好～”</p>
+                <div class="msg-time">30分钟前</div>
+            </div>
+            <div class="msg-item">
+                <p>用户「墙墙」回复了你的表白：“篮球赛视频已保存，感谢分享！”</p>
+                <div class="msg-time">2小时前</div>
+            </div>
+        </div>
+    </div>
+    <div id="mine" class="content">
+        <!-- 登录表单 -->
+        <div class="auth-form" id="loginForm">
+            <h2 class="form-title">登录</h2>
+            <div class="form-group">
+                <label for="loginEmail">邮箱</label>
+                <input type="email" id="loginEmail" class="form-input" placeholder="请输入邮箱">
+            </div>
+            <div class="form-group">
+                <label for="loginPwd">密码</label>
+                <input type="password" id="loginPwd" class="form-input" placeholder="请输入密码">
+            </div>
+            <button class="submit-btn" onclick="handleLogin()">登录</button>
+            <div class="form-switch">
+                还没有账号？<span onclick="switchAuth('register')">去注册</span>
+            </div>
+        </div>
+
+        <!-- 注册表单 -->
+        <div class="auth-form" id="registerForm" style="display: none;">
+            <h2 class="form-title">注册</h2>
+            <div class="form-group">
+                <label for="regEmail">邮箱</label>
+                <input type="email" id="regEmail" class="form-input" placeholder="请输入邮箱">
+            </div>
+            <div class="form-group code-group">
+                <div>
+                    <label for="regCode">验证码</label>
+                    <input type="text" id="regCode" class="form-input code-input" placeholder="请输入验证码">
+                </div>
+                <button class="send-code-btn" onclick="sendCode()">发送验证码</button>
+            </div>
+            <div class="form-group">
+                <label for="regPwd">密码</label>
+                <input type="password" id="regPwd" class="form-input" placeholder="请输入密码（8位以上，含字母数字符号）">
+            </div>
+            <div class="form-group">
+                <label for="regPwdConfirm">确认密码</label>
+                <input type="password" id="regPwdConfirm" class="form-input" placeholder="请再次输入密码">
+            </div>
+            <button class="submit-btn" onclick="handleRegister()">注册</button>
+            <div class="form-switch">
+                已有账号？<span onclick="switchAuth('login')">去登录</span>
+            </div>
+        </div>
+
+        <!-- 登录后用户信息 -->
+        <div class="user-info-login" id="userInfo">
+            <img src="" alt="头像">
+            <h3 id="userName">我的昵称</h3>
+            <p id="userEmail">未绑定邮箱</p>
+            <button class="logout-btn" id="logoutBtn" onclick="handleLogout()">退出登录</button>
+        </div>
+    </div>
+    <div class="nav">
+        <button class="nav-btn active" onclick="switchPage('home')">首页</button>
+        <button class="nav-btn" onclick="switchPage('msg')">消息</button>
+        <button class="nav-btn" onclick="switchPage('mine')">我的</button>
+    </div>
+    <div class="modal" id="loginModal">
+        <div class="modal-content">
+            <p>请先登录后再进行操作</p>
+            <button class="modal-btn" onclick="closeModal()">知道了</button>
+        </div>
+    </div>
+    <div class="modal" id="adminModal">
+        <div class="modal-content">
+            <p>无管理员权限，无法删除</p>
+            <button class="modal-btn" onclick="closeModal()">知道了</button>
+        </div>
+    </div>
+    <div class="modal" id="tipModal">
+        <div class="modal-content">
+            <p id="tipText">操作提示</p>
+            <button class="modal-btn" onclick="closeModal()">知道了</button>
+        </div>
+    </div>
+    <script>
+        let isLogin = false;
+        let isAdmin = false;
+        let userData = null;
+        // 功能未开发提示
+        function showNotDeveloped() {
+            showTip('该功能还未开发，敬请期待～');
+        }
+        // 切换登录/注册表单
+        function switchAuth(type) {
+            if(type === 'login') {
+                document.getElementById('loginForm').style.display = 'block';
+                document.getElementById('registerForm').style.display = 'none';
+            } else {
+                document.getElementById('loginForm').style.display = 'none';
+                document.getElementById('registerForm').style.display = 'block';
+            }
+        }
+        // 发送验证码
+        function sendCode() {
+            const email = document.getElementById('regEmail').value;
+            if(!email) {
+                showTip('请输入邮箱');
+                return;
+            }
+            // 调用后端接口发送验证码
+            fetch('/api/sendCode', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({email})
+            }).then(res => res.json()).then(data => {
+                if(data.code === 200) {
+                    showTip('验证码已发送，请注意查收');
+                } else {
+                    showTip(data.msg);
+                }
+            })
+        }
+        // 注册处理
+        function handleRegister() {
+            const email = document.getElementById('regEmail').value;
+            const code = document.getElementById('regCode').value;
+            const pwd = document.getElementById('regPwd').value;
+            const pwdConfirm = document.getElementById('regPwdConfirm').value;
+            if(!email || !code || !pwd || !pwdConfirm) {
+                showTip('请填写完整信息');
+                return;
+            }
+            if(pwd !== pwdConfirm) {
+                showTip('两次密码输入不一致');
+                return;
+            }
+            // 调用后端接口注册
+            fetch('/api/register', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({email, code, pwd})
+            }).then(res => res.json()).then(data => {
+                if(data.code === 200) {
+                    showTip('注册成功，请登录');
+                    switchAuth('login');
+                } else {
+                    showTip(data.msg);
+                }
+            })
+        }
+        // 登录处理
+        function handleLogin() {
+            const email = document.getElementById('loginEmail').value;
+            const pwd = document.getElementById('loginPwd').value;
+            if(!email || !pwd) {
+                showTip('请填写邮箱和密码');
+                return;
+            }
+            // 调用后端接口登录
+            fetch('/api/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({email, pwd})
+            }).then(res => res.json()).then(data => {
+                if(data.code === 200) {
+                    isLogin = true;
+                    userData = data.data;
+                    // 显示用户信息，隐藏表单
+                    document.getElementById('loginForm').style.display = 'none';
+                    document.getElementById('registerForm').style.display = 'none';
+                    document.getElementById('userInfo').style.display = 'block';
+                    document.getElementById('userName').innerText = userData.nickname;
+                    document.getElementById('userEmail').innerText = userData.email;
+                    document.getElementById('logoutBtn').style.display = 'block';
+                    // 更新全局登录状态
+                    window.isLogin = true;
+                    if(userData.isAdmin) window.isAdmin = true;
+                } else {
+                    showTip(data.msg);
+                }
+            })
+        }
+        // 退出登录
+        function handleLogout() {
+            isLogin = false;
+            isAdmin = false;
+            userData = null;
+            window.isLogin = false;
+            window.isAdmin = false;
+            document.getElementById('userInfo').style.display = 'none';
+            document.getElementById('loginForm').style.display = 'block';
+        }
+        // 显示提示弹窗
+        function showTip(text) {
+            document.getElementById('tipText').innerText = text;
+            document.getElementById('tipModal').style.display = 'flex';
+        }
+        function switchPage(pageId) {
+            document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.content').forEach(cont => cont.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+        }
+        function switchGrade(grade) {
+            document.querySelectorAll('.grade-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+        function toggleMenu(btn) {
+            const menu = btn.nextElementSibling;
+            menu.classList.toggle('show');
+        }
+        function checkLogin(type) {
+            if(!isLogin){
+                document.getElementById('loginModal').style.display = 'flex';
+            }else{
+                if(type === 'like'){
+                    event.target.innerHTML = event.target.innerHTML.includes('👍 点赞') ? '👍 已点赞' : '👍 点赞';
+                }else{
+                    alert('回复功能');
+                }
+            }
+        }
+        function checkAdmin() {
+            if(!isAdmin){
+                document.getElementById('adminModal').style.display = 'flex';
+            }else{
+                event.target.closest('.confession-item').remove();
+            }
+        }
+        function closeModal() {
+            document.getElementById('loginModal').style.display = 'none';
+            document.getElementById('adminModal').style.display = 'none';
+            document.getElementById('tipModal').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
