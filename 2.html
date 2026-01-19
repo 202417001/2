@@ -1,1 +1,497 @@
-网站没了
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>18+ 视频网站</title>
+    <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+        /* 开场动画层 - 恢复第一版样式 */
+        .start-anime {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: #000;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .anime-text {
+            font-family: 'Ma Shan Zheng', cursive;
+            color: #fff;
+            text-align: center;
+            opacity: 0;
+            animation-fill-mode: forwards;
+        }
+        .text1 {
+            font-size: 80px;
+            margin-bottom: 40px;
+            /* 彩色渐变文字 */
+            background: linear-gradient(90deg, red, orange, yellow, green, blue, indigo, violet);
+            background-size: 600% 600%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: gradient 3s ease infinite, showHello 3s ease forwards;
+        }
+        .text2 {
+            font-size: 40px;
+            animation: showWelcome 3s ease forwards;
+            animation-delay: 3s; /* text1播放完再播放text2 */
+        }
+        /* 彩色渐变动画 */
+        @keyframes gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        /* 你好 显示动画 */
+        @keyframes showHello {
+            0% { opacity: 0; transform: scale(0.8); }
+            50% { opacity: 1; transform: scale(1.2); }
+            100% { opacity: 0; transform: scale(0.8); }
+        }
+        /* 欢迎语 显示动画 */
+        @keyframes showWelcome {
+            0% { opacity: 0; transform: translateY(20px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+        /* 公告栏样式 */
+        .notice-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background-color: #ff3333;
+            color: #fff;
+            text-align: center;
+            padding: 12px 0;
+            font-size: 16px;
+            z-index: 999;
+        }
+        body {
+            background-color: #1a1a1a;
+            color: #fff;
+            overflow-x: hidden;
+            padding-top: 44px;
+        }
+        .age-restrict {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            background-color: #000;
+        }
+        .age-title {
+            font-size: 60px;
+            font-weight: bold;
+            margin-bottom: 40px;
+            background: linear-gradient(90deg, red, orange, yellow, green, blue, indigo, violet);
+            background-size: 600% 600%;
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: gradient 3s ease infinite;
+        }
+        .enter-btn {
+            padding: 15px 40px;
+            font-size: 20px;
+            cursor: pointer;
+            background-color: #ff3333;
+            border: none;
+            border-radius: 5px;
+            color: #fff;
+            transition: all 0.3s ease;
+        }
+        .enter-btn:hover {
+            background-color: #ff6666;
+            transform: scale(1.05);
+        }
+        .password-container {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #2d2d2d;
+            padding: 30px;
+            border-radius: 10px;
+            z-index: 1001;
+            text-align: center;
+            box-shadow: 0 0 20px rgba(0, 204, 255, 0.3);
+        }
+        input {
+            padding: 10px;
+            font-size: 16px;
+            margin: 10px 0;
+            width: 250px;
+            border: none;
+            border-radius: 5px;
+        }
+        .submit-btn {
+            padding: 10px 30px;
+            background-color: #00ccff;
+            border: none;
+            border-radius: 5px;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .submit-btn:hover {
+            background-color: #0099cc;
+        }
+        .error-text {
+            color: red;
+            margin-top: 10px;
+            display: none;
+        }
+        .video-list {
+            display: none;
+            padding: 50px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .category {
+            margin-bottom: 60px;
+        }
+        .category h2 {
+            color: #00ccff;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 10px;
+            font-size: 24px;
+        }
+        .category-btn {
+            padding: 12px 30px;
+            font-size: 18px;
+            margin: 0 10px 20px 0;
+            background-color: #3d3d3d;
+            border: none;
+            border-radius: 5px;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .category-btn:hover {
+            background-color: #555;
+            transform: translateY(-2px);
+        }
+        .video-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+            gap: 25px;
+            display: none;
+        }
+        .video-item {
+            background-color: #2d2d2d;
+            border-radius: 8px;
+            overflow: hidden;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .video-item:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 16px rgba(0, 204, 255, 0.2);
+        }
+        .video-thumb {
+            width: 100%;
+            height: 140px;
+            background-color: #444;
+            background-size: cover;
+            background-position: center;
+        }
+        .video-title {
+            padding: 12px;
+            font-size: 14px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .player-page {
+            display: none;
+            padding: 50px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .back-btn {
+            padding: 10px 25px;
+            background-color: #ff3333;
+            border: none;
+            border-radius: 5px;
+            color: #fff;
+            cursor: pointer;
+            margin-bottom: 20px;
+            transition: all 0.3s ease;
+        }
+        .back-btn:hover {
+            background-color: #ff6666;
+            transform: translateY(-2px);
+        }
+        .video-player {
+            width: 100%;
+            height: 680px;
+            background-color: #000;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .control-panel {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: center;
+            background-color: #2d2d2d;
+            padding: 20px;
+            border-radius: 10px;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .control-group label {
+            color: #ccc;
+            min-width: 60px;
+        }
+        .control-group select, .control-group input[type="range"] {
+            padding: 5px;
+            border-radius: 5px;
+            border: none;
+        }
+        .control-group input[type="range"] {
+            width: 120px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 开场动画层 - 第一版结构 -->
+    <div class="start-anime" id="startAnime">
+        <div class="anime-text text1">你好</div>
+        <div class="anime-text text2">
+            欢迎进入此网站<br>
+            Welcome to this website<br>
+            このウェブサイトへようこそ<br>
+            Willkommen auf dieser Website
+        </div>
+    </div>
+
+    <!-- 公告栏 -->
+    <div class="notice-bar">
+         | 距离1月20日还有：<span id="countdown"></span>
+    </div>
+
+    <div class="age-restrict" id="ageRestrict">
+        <div class="age-title">未满18岁禁止入内</div>
+        <button class="enter-btn" id="enterBtn">点击进入（需密码）</button>
+    </div>
+
+    <div class="password-container" id="initPwdContainer">
+        <h3>输入进入密码</h3>
+        <input type="password" id="initPwdInput" placeholder="请输入密码">
+        <br>
+        <button class="submit-btn" id="initPwdBtn">提交</button>
+        <div class="error-text" id="initPwdError">密码错误</div>
+    </div>
+
+    <div class="video-list" id="videoList">
+        <div class="category">
+            <h2>国产大片</h2>
+            <button class="category-btn" id="chinaBtn">点击解锁（需密码）</button>
+            <div class="video-grid" id="chinaGrid">
+                          <div class="video-grid" id="chinaGrid">
+                <div class="video-item" data-video="https://202417001.github.io/3/刘德华.mp4" data-thumb="https://clrvai.com/Cloud_Drive/a6606f0ee2fda630889ccc9dbf418241.jpg">
+                    <div class="video-thumb" style="background-image: url('https://clrvai.com/Cloud_Drive/a6606f0ee2fda630889ccc9dbf418241.jpg')"></div>
+                    <div class="video-title">过年好！</div>
+                </div>
+                <div class="video-item" data-video="https://202417001.github.io/3/官宣.mp4" data-thumb="https://clrvai.com/Cloud_Drive/85e70c5aa241de4da5f963bc0a9c6c06.jpg">
+                    <div class="video-thumb" style="background-image: url('https://clrvai.com/Cloud_Drive/85e70c5aa241de4da5f963bc0a9c6c06.jpg')"></div>
+                    <div class="video-title">还想和你官宣发我们的朋友圈</div>
+                </div>
+                <div class="video-item" data-video="https://202417001.github.io/3/董叶佳帅气的舞蹈.mp4" data-thumb="https://clrvai.com/Cloud_Drive/684417bb02897ca22d0a39075b2bed53.jog">
+                    <div class="video-thumb" style="background-image: url('https://clrvai.com/Cloud_Drive/684417bb02897ca22d0a39075b2bed53.jpg')"></div>
+                    <div class="video-title">帅气的舞蹈</div>
+                </div>                
+                <div class="video-item" data-video="https://202417001.github.io/3/李宇轩超人强.mp4" data-thumb="https://clrvai.com/Cloud_Drive/55af8eaa6d0ed8a5add10cbddda87e8d.png">
+                    <div class="video-thumb" style="background-image: url('https://clrvai.com/Cloud_Drive/55af8eaa6d0ed8a5add10cbddda87e8d.png')"></div>
+                    <div class="video-title">超人强要出现</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="password-container" id="chinaPwdContainer">
+        <h3>输入国产大片密码</h3>
+        <input type="password" id="chinaPwdInput" placeholder="请输入密码">
+        <br>
+        <button class="submit-btn" id="chinaPwdBtn">提交</button>
+        <div class="error-text" id="chinaPwdError">密码错误</div>
+    </div>
+
+    <div class="player-page" id="playerPage">
+        <button class="back-btn" id="backBtn">返回视频列表</button>
+        <video class="video-player" id="videoPlayer" controls>
+            <source src="" type="video/mp4">
+            你的浏览器不支持视频播放
+        </video>
+        <div class="control-panel">
+            <div class="control-group">
+                <label>倍速：</label>
+                <select id="speedSelect">
+                    <option value="0.5">0.5x</option>
+                    <option value="1" selected>1x</option>
+                    <option value="1.5">1.5x</option>
+                    <option value="2">2x</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <label>循环：</label>
+                <input type="checkbox" id="loopCheck">
+            </div>
+            <div class="control-group">
+                <label>亮度：</label>
+                <input type="range" id="brightnessSlider" min="0" max="2" step="0.1" value="1">
+            </div>
+            <div class="control-group">
+                <label>对比度：</label>
+                <input type="range" id="contrastSlider" min="0" max="2" step="0.1" value="1">
+            </div>
+            <div class="control-group">
+                <label>饱和度：</label>
+                <input type="range" id="saturationSlider" min="0" max="2" step="0.1" value="1">
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1月20号倒计时函数
+        function updateCountdown() {
+            const now = new Date();
+            let targetYear = now.getFullYear();
+            const targetDate = new Date(targetYear, 0, 20);
+            if (now > targetDate) {
+                targetDate.setFullYear(targetYear + 1);
+            }
+            const diff = targetDate - now;
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+            const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+            document.getElementById("countdown").textContent = `${days}天 ${hours}时 ${minutes}分 ${seconds}秒`;
+        }
+        updateCountdown();
+        setInterval(updateCountdown, 1000);
+
+        // 动画自动关闭：总时长=text1(3s) + text2延迟(3s) + text2播放(3s) = 9秒
+        const startAnime = document.getElementById("startAnime");
+        setTimeout(() => {
+            startAnime.style.display = "none";
+        }, 9000);
+
+        // 密码和功能逻辑
+        const DEFAULT_PWD = "20260119";
+        let currentCategory = "";
+
+        const ageRestrict = document.getElementById("ageRestrict");
+        const enterBtn = document.getElementById("enterBtn");
+        const initPwdContainer = document.getElementById("initPwdContainer");
+        const initPwdInput = document.getElementById("initPwdInput");
+        const initPwdBtn = document.getElementById("initPwdBtn");
+        const initPwdError = document.getElementById("initPwdError");
+        const videoList = document.getElementById("videoList");
+        const chinaBtn = document.getElementById("chinaBtn");
+        const chinaGrid = document.getElementById("chinaGrid");
+        const chinaPwdContainer = document.getElementById("chinaPwdContainer");
+        const chinaPwdInput = document.getElementById("chinaPwdInput");
+        const chinaPwdBtn = document.getElementById("chinaPwdBtn");
+        const chinaPwdError = document.getElementById("chinaPwdError");
+        const playerPage = document.getElementById("playerPage");
+        const backBtn = document.getElementById("backBtn");
+        const videoPlayer = document.getElementById("videoPlayer");
+        const speedSelect = document.getElementById("speedSelect");
+        const loopCheck = document.getElementById("loopCheck");
+        const brightnessSlider = document.getElementById("brightnessSlider");
+        const contrastSlider = document.getElementById("contrastSlider");
+        const saturationSlider = document.getElementById("saturationSlider");
+
+        enterBtn.addEventListener("click", () => {
+            ageRestrict.style.display = "none";
+            initPwdContainer.style.display = "block";
+        });
+
+        initPwdBtn.addEventListener("click", () => {
+            if (initPwdInput.value === DEFAULT_PWD) {
+                initPwdContainer.style.display = "none";
+                videoList.style.display = "block";
+            } else {
+                initPwdError.style.display = "block";
+                setTimeout(() => initPwdError.style.display = "none", 1500);
+            }
+            initPwdInput.value = "";
+        });
+
+        chinaBtn.addEventListener("click", () => {
+            currentCategory = "china";
+            chinaPwdContainer.style.display = "block";
+        });
+
+        chinaPwdBtn.addEventListener("click", () => {
+            if (chinaPwdInput.value === DEFAULT_PWD) {
+                chinaPwdContainer.style.display = "none";
+                chinaGrid.style.display = "grid";
+            } else {
+                chinaPwdError.style.display = "block";
+                setTimeout(() => chinaPwdError.style.display = "none", 1500);
+            }
+            chinaPwdInput.value = "";
+        });
+
+        document.querySelectorAll(".video-item").forEach(item => {
+            item.addEventListener("click", () => {
+                const videoSrc = item.getAttribute("data-video");
+                videoList.style.display = "none";
+                playerPage.style.display = "block";
+                videoPlayer.src = videoSrc;
+                videoPlayer.load();
+            });
+        });
+
+        backBtn.addEventListener("click", () => {
+            playerPage.style.display = "none";
+            videoList.style.display = "block";
+            videoPlayer.pause();
+            videoPlayer.src = "";
+        });
+
+        speedSelect.addEventListener("change", () => {
+            videoPlayer.playbackRate = speedSelect.value;
+        });
+
+        loopCheck.addEventListener("change", () => {
+            videoPlayer.loop = loopCheck.checked;
+        });
+
+        function updateFilter() {
+            videoPlayer.style.filter = `brightness(${brightnessSlider.value}) contrast(${contrastSlider.value}) saturate(${saturationSlider.value})`;
+        }
+
+        brightnessSlider.addEventListener("input", updateFilter);
+        contrastSlider.addEventListener("input", updateFilter);
+        saturationSlider.addEventListener("input", updateFilter);
+    </script>
+</body>
+</html>
