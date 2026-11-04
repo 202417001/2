@@ -1,5 +1,5 @@
 -- ============================================
--- Ninja Panel v27 (暴力提取版 · 锁定数字)
+-- Ninja Panel v27 (属性锁死版)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -7,7 +7,7 @@ local RunService = game:GetService("RunService")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
-local CFG = { ESP = false, ESPHealth = false, ESPRole = false, Scale = 1.0 }
+local CFG = { ESP = false, ESPHealth = false, ESPRole = false, Scale = 1.0, LockStamina = false }
 local CN_ROLE_MAP = { ["Chef"]="厨师",["Civilian"]="平民",["Delivery"]="快递员",["Farmer"]="农夫",["Fire"]="消防员",["Medical"]="医生",["Police"]="警察",["Prisoner"]="囚犯",["Road Service"]="路政",["Transit"]="公交司机" }
 
 local function getHiddenGui(name)
@@ -32,7 +32,7 @@ icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = fa
 local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v27 (暴力提取)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
+title.BorderSizePixel = 0; title.Text = "Ninja v27 (属性锁死)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
 local function mkTitleBtn(text, xoff, cb)
@@ -51,7 +51,7 @@ scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main
 local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
 
 local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 36); statusBar.Position = UDim2.new(0, 6, 1, -42)
-statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "等待开启抓取"
+statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "等待拦截..."
 statusBar.TextColor3 = Color3.fromRGB(0, 255, 150); statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12
 statusBar.Parent = main; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
 
@@ -78,61 +78,55 @@ local function getRoleLabel(plr)
 end
 
 -- ==========================================
--- 核心：暴力遍历参数抓取
+-- 终极核心：拦截并篡改 PlayerEvent
 -- ==========================================
-local currentStats = {} -- 用来存放所有抓到的值
-local hooked = false
+local realStamina = "未知"
+local realHunger = "未知"
 
-local function startStateHook()
-    if not hookmetamethod then statusBar.Text = "不支持 Hook" return end
-    if hooked then statusBar.Text = "已经在抓取了" return end
+local function startLock()
+    if not hookmetamethod then statusBar.Text = "执行器不支持 Hook" return end
     
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
         
-        -- 抓取所有向服务器发包的事件（重点盯防 PlayerEvent）
-        if not checkcaller() and (method == "FireServer" or method == "InvokeServer") then
+        if not checkcaller() and (method == "FireServer" or method == "InvokeServer") and self.Name == "PlayerEvent" then
             local args = {...}
-            -- 暴力遍历参数，不管它在第几个位置
-            for i, v in ipairs(args) do
-                if type(v) == "number" and v >= 0 and v <= 100 then
-                    -- 排除坐标轴和极小值
-                    if not (v < 1 and v > 0) then
-                        -- 把抓到的数值放进表里，键名用事件名+参数位置
-                        local key = self.Name .. " (" .. tostring(i) .. ")"
-                        currentStats[key] = math.floor(v)
-                    end
+            
+            -- 抓取真实的数值 (参数 3)
+            if type(args[3]) == "number" and args[3] >= 0 and args[3] <= 100 then
+                realStamina = tostring(math.floor(args[3]))
+                -- 如果开启锁死，强制改成 100
+                if CFG.LockStamina then
+                    args[3] = 100
                 end
             end
+            
+            -- 抓取参数 2 (饥饿或状态)
+            if type(args[2]) == "number" and args[2] >= 0 and args[2] <= 100 then
+                realHunger = tostring(math.floor(args[2]))
+            end
+            
+            -- 放行修改后的包
+            return oldNamecall(self, unpack(args))
         end
         
         return oldNamecall(self, ...)
     end)
-    hooked = true
-    statusBar.Text = "✔ 暴力抓取已开启，去跑步"
+    statusBar.Text = "✔ 监听已开启"
 end
 
--- 刷新底部状态栏，把所有抓到的变量显示出来
+-- 定时刷新底部文本
 task.spawn(function()
     while task.wait(0.5) do
-        if hooked then
-            local txt = {}
-            for k, v in pairs(currentStats) do
-                -- 只显示最近在变动的，最多显示 3 个防止太长
-                table.insert(txt, k .. ":" .. tostring(v))
-                if #txt >= 3 then break end
-            end
-            if #txt > 0 then
-                statusBar.Text = table.concat(txt, " | ")
-            else
-                statusBar.Text = "正在抓取...请去跑步消耗"
-            end
+        if realStamina ~= "未知" then
+            local lockStr = CFG.LockStamina and " (已锁 100)" or ""
+            statusBar.Text = "🍗 饥饿: " .. realHunger .. " | ⚡ 真实耐力: " .. realStamina .. lockStr
         end
     end
 end)
 
--- ---------- 原生 BillboardGui ESP ----------
+-- ---------- 原生 BillboardGui ESP (极短血条) ----------
 local espData = {}
 local function buildESP(plr)
     if plr == LP then return end; if espData[plr] then return end
@@ -173,6 +167,7 @@ addToggle("透视 玩家名字", "ESP")
 addToggle("透视 血条比例", "ESPHealth")
 addToggle("透视 中文职业", "ESPRole")
 
-addButton("开启暴力提取", startStateHook, Color3.fromRGB(50, 150, 200))
+addButton("开启网络 Hook", startLock, Color3.fromRGB(50, 150, 200))
+addToggle("锁死耐力值 100", "LockStamina")
 
 print("[Ninja Panel v27] 已加载")
