@@ -1,10 +1,9 @@
 -- ============================================
--- Ninja Panel v19 (网络与动画双频拦截版)
+-- Ninja Panel v20 (无Hook · 雷达扫描)
 -- ============================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
@@ -33,7 +32,7 @@ icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = fa
 local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v19 (双频拦截)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
+title.BorderSizePixel = 0; title.Text = "Ninja v20 (雷达版)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
 local function mkTitleBtn(text, xoff, cb)
@@ -51,9 +50,12 @@ scroll.BackgroundTransparency = 1; scroll.BorderSizePixel = 0; scroll.ScrollBarT
 scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main
 local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
 
-local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 36); statusBar.Position = UDim2.new(0, 6, 1, -42)
-statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "等待拦截..."; statusBar.TextColor3 = Color3.fromRGB(0, 255, 150)
-statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12; statusBar.Parent = main; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
+local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 48); statusBar.Position = UDim2.new(0, 6, 1, -54)
+statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "雷达扫描中..."
+statusBar.TextColor3 = Color3.fromRGB(0, 255, 150); statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 11
+statusBar.TextWrapped = true; statusBar.TextYAlignment = Enum.TextYAlignment.Top; statusBar.Parent = main
+Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
+local statusPad = Instance.new("UIPadding", statusBar); statusPad.PaddingTop = UDim.new(0, 6); statusPad.PaddingLeft = UDim.new(0, 6)
 
 local function addButton(text, cb, color)
     local b = Instance.new("TextButton"); b.Size = UDim2.new(1, -6, 0, 34); b.BackgroundColor3 = color or Color3.fromRGB(50, 50, 60)
@@ -83,85 +85,50 @@ local function getRoleLabel(plr)
 end
 
 -- ==========================================
--- 核心科技：Hook 拦截
+-- 雷达扫描核心 (不卡顿)
 -- ==========================================
-local capturedStamina = "未知"
-local capturedHunger = "未知"
-local logData = {}
+local radarTargets = {}
 
--- 拦截网络包
-local function startRemoteHook()
-    if not hookmetamethod then statusBar.Text = "不支持 Hook" return end
-    local oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-        local method = getnamecallmethod()
-        if not checkcaller() then
-            if method == "FireServer" or method == "InvokeServer" then
-                local args = {...}
-                for _, arg in pairs(args) do
-                    if type(arg) == "number" and arg >= 0 and arg <= 100 then
-                        -- 记录所有发送的数字
-                        table.insert(logData, self.Name .. " 发送: " .. tostring(arg))
-                        if #logData > 50 then table.remove(logData, 1) end
-                    end
-                end
-            end
-        end
-        return oldNamecall(self, ...)
-    end)
-end
-
--- 拦截 Tween 动画 (这次绝不干涉游戏运行)
-local function startTweenHook()
-    if not hookmetamethod then return end
-    local oldNamecall
-    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-        if getnamecallmethod() == "Create" and self == TweenService then
-            local instance = select(1, ...)
-            local goal = select(3, ...)
-            
-            if instance and goal and not checkcaller() then
-                -- 抓取变动
-                if instance:IsA("Frame") or instance:IsA("ImageLabel") or instance:IsA("TextLabel") then
-                    local val = nil
-                    if goal.Size then val = math.floor((goal.Size.X.Scale or 0) * 100) .. "%"
-                    elseif goal.ImageTransparency then val = math.floor((1 - goal.ImageTransparency) * 100) .. "%"
-                    elseif goal.Text then val = goal.Text end
-                    
-                    if val then
-                        local nameLower = instance.Name:lower()
-                        local parentLower = instance.Parent and instance.Parent.Name:lower() or ""
-                        
-                        -- 根据名字或父级猜
-                        if nameLower:find("stamina") or parentLower:find("stamina") or nameLower:find("energy") or parentLower:find("sprint") then
-                            capturedStamina = val
-                        elseif nameLower:find("hunger") or parentLower:find("hunger") or nameLower:find("food") then
-                            capturedHunger = val
-                        elseif nameLower == "bar" or parentLower:find("bar") then
-                            -- 如果没有名字，按顺序猜（通常是先饥饿后耐力）
-                            if capturedHunger == "未知" then capturedHunger = val
-                            elseif capturedStamina == "未知" then capturedStamina = val end
-                        end
-                    end
-                end
-            end
-        end
-        return oldNamecall(self, ...) -- 必须原样返回，保证游戏正常显示！
-    end)
-end
-
-startRemoteHook()
-startTweenHook()
-
--- 定时刷新
+-- 定期更新雷达列表 (每2秒一次)
 task.spawn(function()
-    while task.wait(1) do
-        if capturedStamina ~= "未知" or capturedHunger ~= "未知" then
-            statusBar.Text = "🍗 饥饿: " .. capturedHunger .. "  |  ⚡ 耐力: " .. capturedStamina
-        else
-            statusBar.Text = "Hook 已开启，请跑动或吃东西"
+    while task.wait(2) do
+        radarTargets = {}
+        local pg = LP:FindFirstChild("PlayerGui")
+        if pg then
+            for _, obj in ipairs(pg:GetDescendants()) do
+                if obj.Visible and (obj:IsA("Frame") or obj:IsA("ImageLabel")) then
+                    -- 判断是不是目标
+                    local nameLower = obj.Name:lower()
+                    local parentLower = obj.Parent and obj.Parent.Name:lower() or ""
+                    if nameLower:find("bar") or nameLower:find("stamina") or nameLower:find("hunger") or nameLower:find("flare") or nameLower:find("middle") then
+                        table.insert(radarTargets, obj)
+                    end
+                end
+            end
         end
     end
 end)
+
+-- 底部实时刷新 (每 0.2 秒一次)
+task.spawn(function()
+    while task.wait(0.2) do
+        if #radarTargets == 0 then
+            statusBar.Text = "未扫描到可疑组件..."
+        else
+            local txt = {}
+            for i, obj in ipairs(radarTargets) do
+                if i > 4 then break end -- 最多显示 4 个，防乱
+                local val = ""
+                if obj:IsA("Frame") or obj:IsA("ImageLabel") then
+                    val = "比例:" .. tostring(math.floor(obj.Size.X.Scale * 100)) .. "%"
+                end
+                table.insert(txt, "[" .. obj.Name .. "] " .. val)
+            end
+            statusBar.Text = table.concat(txt, "\n")
+        end
+    end
+end)
+
 
 -- ---------- 原生 BillboardGui ESP (极短血条) ----------
 local espData = {}
@@ -216,4 +183,4 @@ addToggle("移动加速", "Speed")
 addToggle("高跳", "Jump")
 addToggle("穿墙 (Noclip)", "Noclip")
 
-print("[Ninja Panel v19] 已加载，双频监听中")
+print("[Ninja Panel v20] 已加载，雷达扫描中")
