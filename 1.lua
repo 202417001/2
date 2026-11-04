@@ -1,5 +1,5 @@
 -- ============================================
--- Ninja Panel v12 (血条优化 · 图标物理抓取)
+-- Ninja Panel v13 (状态动态捕捉版)
 -- ============================================
 
 local Players           = game:GetService("Players")
@@ -20,7 +20,6 @@ local CN_ROLE_MAP = {
     ["Transit"] = "公交司机"
 }
 
--- ---------- 核心级 GUI 隐藏处理 (防封) ----------
 local function getHiddenGui(name)
     local g = Instance.new("ScreenGui")
     g.Name = name; g.ResetOnSpawn = false; g.IgnoreGuiInset = true
@@ -33,7 +32,6 @@ end
 local mainGui = getHiddenGui("MainPanel_" .. math.random(1000, 9999))
 local espGui = getHiddenGui("EspRender_" .. math.random(1000, 9999))
 
--- ---------- 主面板 UI ----------
 local main = Instance.new("Frame")
 main.Size = UDim2.fromOffset(300, 420)
 main.Position = UDim2.fromScale(0.02, 0.2)
@@ -55,7 +53,7 @@ local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v12"; title.TextColor3 = Color3.new(1, 1, 1)
+title.BorderSizePixel = 0; title.Text = "Ninja v13 (动态捕捉)"; title.TextColor3 = Color3.new(1, 1, 1)
 title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
@@ -84,7 +82,7 @@ layout.Padding = UDim.new(0, 6); layout.SortOrder = Enum.SortOrder.LayoutOrder; 
 local statusBar = Instance.new("TextLabel")
 statusBar.Size = UDim2.new(1, -12, 0, 36); statusBar.Position = UDim2.new(0, 6, 1, -42)
 statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0
-statusBar.Text = "状态抓取中..."; statusBar.TextColor3 = Color3.fromRGB(0, 255, 150)
+statusBar.Text = "等待捕获..."; statusBar.TextColor3 = Color3.fromRGB(0, 255, 150)
 statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12; statusBar.Parent = main
 Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
 
@@ -127,122 +125,88 @@ local function getRoleLabel(plr)
     return "平民"
 end
 
--- ---------- 状态抓取 (强力 UI + 物理比例) ----------
-local function getStatUI(keywords)
-    local pg = LP:FindFirstChild("PlayerGui")
-    if not pg then return nil end
-    
-    local bestNum = nil
-    local bestScale = nil
-    
-    for _, obj in ipairs(pg:GetDescendants()) do
-        -- 1. 找文字
-        if obj:IsA("TextLabel") and obj.Visible and obj.Text ~= "" then
-            local text = obj.Text:lower()
-            for _, kw in ipairs(keywords) do
-                if obj.Name:lower():find(kw) or text:find(kw) then
-                    local num = text:match("(%d+)")
-                    if num then bestNum = tonumber(num) end
-                end
-            end
-        end
-        -- 2. 暴力抓进度条 (找左下角区域，且 Size.X.Scale 在 0-1 之间的 Frame/ImageLabel)
-        if (obj:IsA("Frame") or obj:IsA("ImageLabel")) and obj.Visible then
-            local pos = obj.AbsolutePosition
-            -- 粗略判断在屏幕左下角 (Y轴 > 屏幕高度 * 0.7)
-            if pos.Y > Camera.ViewportSize.Y * 0.7 then
-                local scale = obj.Size.X.Scale
-                if scale > 0 and scale <= 1 then
-                    local nameMatch = false
-                    for _, kw in ipairs(keywords) do
-                        if obj.Name:lower():find(kw) or (obj.Parent and obj.Parent.Name:lower():find(kw)) then
-                            nameMatch = true
-                        end
-                    end
-                    -- 如果名字匹配，或者名字叫 Bar 等，或者就默认抓取第一个符合比例的
-                    if nameMatch or obj.Name:lower():find("bar") then
-                        bestScale = math.floor(scale * 100)
-                    end
-                end
-            end
-        end
-    end
-    return bestNum or bestScale
-end
-
-task.spawn(function()
-    while task.wait(1) do
-        -- 穷举关键字
-        local hunger = getStatUI({"hunger", "food", "饥饿", "饱食", "肉"}) or "未知"
-        local stamina = getStatUI({"stamina", "energy", "耐力", "体力", "精力", "鞋", "sprint"}) or "未知"
-        
-        local function format(v)
-            if type(v) == "number" then
-                if v > 0 and v <= 1 then return math.floor(v * 100) .. "%"
-                else return math.floor(v) .. "%" end
-            end
-            return tostring(v)
-        end
-        statusBar.Text = "🍗 饥饿: " .. format(hunger) .. "  |  ⚡ 耐力: " .. format(stamina)
-    end
-end)
-
--- ---------- 深度扫描 ----------
-local function deepScanSelf()
-    local L = {}
-    local function w(s) table.insert(L, tostring(s)) end
-    w("===== 界面元素尺寸扫描 =====")
-    w("(查找左下角有变化的 Frame/ImageLabel)")
-    
+-- ---------- 核心：动态 UI 捕捉 ----------
+local function captureState()
+    local state = {}
     local pg = LP:FindFirstChild("PlayerGui")
     if pg then
-        for _, c in ipairs(pg:GetDescendants()) do
-            if (c:IsA("Frame") or c:IsA("ImageLabel")) and c.Visible then
-                local scale = c.Size.X.Scale
-                if scale > 0 and scale < 1 then
-                    w("  [比例] " .. c.Name .. " (父级:" .. c.Parent.Name .. ") = " .. tostring(math.floor(scale*100)) .. "%")
-                end
+        for _, obj in ipairs(pg:GetDescendants()) do
+            local key = obj:GetFullName()
+            if obj:IsA("TextLabel") then
+                state[key] = tostring(obj.Text)
+            elseif obj:IsA("Frame") or obj:IsA("ImageLabel") then
+                -- 记录宽度和高度的 Scale 比例
+                state[key] = tostring(obj.Size.X.Scale) .. "x" .. tostring(obj.Size.Y.Scale)
             end
         end
     end
-    w("===== 扫描结束 =====")
+    return state
+end
+
+local function catchChanges()
+    local L = {}
+    local function w(s) table.insert(L, tostring(s)) end
     
-    local oldWin = mainGui:FindFirstChild("ScanStatWin")
-    if oldWin then oldWin:Destroy() end
-
-    local win = Instance.new("Frame")
-    win.Name = "ScanStatWin"
-    win.Size = UDim2.fromOffset(320, 300)
-    win.Position = UDim2.fromScale(0.5, 0.5); win.AnchorPoint = Vector2.new(0.5, 0.5)
-    win.BackgroundColor3 = Color3.fromRGB(15, 15, 20); win.BorderSizePixel = 0
-    win.Active = true; win.Draggable = true; win.Parent = mainGui
-    Instance.new("UICorner", win).CornerRadius = UDim.new(0, 8)
-
-    local wtitle = Instance.new("TextLabel")
-    wtitle.Size = UDim2.new(1, 0, 0, 30); wtitle.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
-    wtitle.BorderSizePixel = 0; wtitle.Text = "深度扫描结果"; wtitle.TextColor3 = Color3.new(1, 1, 1)
-    wtitle.Font = Enum.Font.GothamBold; wtitle.Parent = win
-    Instance.new("UICorner", wtitle).CornerRadius = UDim.new(0, 8)
-
-    local wclose = Instance.new("TextButton")
-    wclose.Size = UDim2.fromOffset(28, 28); wclose.Position = UDim2.new(1, -30, 0, 1)
-    wclose.BackgroundColor3 = Color3.fromRGB(120, 40, 40); wclose.Text = "×"
-    wclose.TextColor3 = Color3.new(1, 1, 1); wclose.Parent = win
-    Instance.new("UICorner", wclose).CornerRadius = UDim.new(0, 6)
-    wclose.MouseButton1Click:Connect(function() win:Destroy() end)
-
-    local wscroll = Instance.new("ScrollingFrame")
-    wscroll.Size = UDim2.new(1, -12, 1, -40); wscroll.Position = UDim2.fromOffset(6, 34)
-    wscroll.BackgroundTransparency = 1; wscroll.ScrollBarThickness = 4
-    wscroll.CanvasSize = UDim2.new(0, 0, 0, 0); wscroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    wscroll.Parent = win
-
-    local wtext = Instance.new("TextLabel")
-    wtext.Size = UDim2.new(1, -6, 0, 0); wtext.AutomaticSize = Enum.AutomaticSize.Y
-    wtext.BackgroundTransparency = 1; wtext.Text = table.concat(L, "\n")
-    wtext.TextColor3 = Color3.fromRGB(220, 220, 230); wtext.Font = Enum.Font.Code; wtext.TextSize = 11
-    wtext.TextXAlignment = Enum.TextXAlignment.Left; wtext.TextYAlignment = Enum.TextYAlignment.Top
-    wtext.TextWrapped = true; wtext.Parent = wscroll
+    statusBar.Text = "拍照记录中..."
+    local before = captureState()
+    
+    w("===== 动态捕捉 =====")
+    w("已记录当前状态！")
+    w("请立刻在游戏里：")
+    w("1. 跑动消耗耐力")
+    w("2. 或者吃东西改变饥饿")
+    w("等待 10 秒后自动比对...")
+    
+    task.delay(10, function()
+        local after = captureState()
+        
+        w("===== 变动结果 =====")
+        local changed = false
+        for k, v in pairs(after) do
+            if before[k] and before[k] ~= v then
+                -- 过滤掉常见的无关 UI 刷新（如金币、聊天框）
+                if not k:lower():find("chat") and not k:lower():find("money") then
+                    w("真凶找到了！")
+                    w("位置: " .. k)
+                    w("原状态: " .. before[k])
+                    w("现状态: " .. v)
+                    changed = true
+                end
+            end
+        end
+        
+        if not changed then
+            w("没有任何 UI 发生变化。")
+            w("说明游戏是用纯图片绘制，或者存在外部代码里了。")
+        end
+        
+        statusBar.Text = "🍗 饥饿: 未知 | ⚡ 耐力: 未知"
+        
+        -- 弹窗显示
+        local oldWin = mainGui:FindFirstChild("ScanWin")
+        if oldWin then oldWin:Destroy() end
+        local win = Instance.new("Frame")
+        win.Size = UDim2.fromOffset(320, 300); win.Position = UDim2.fromScale(0.5, 0.5); win.AnchorPoint = Vector2.new(0.5, 0.5)
+        win.BackgroundColor3 = Color3.fromRGB(15, 15, 20); win.Parent = mainGui
+        Instance.new("UICorner", win).CornerRadius = UDim.new(0, 8)
+        
+        local wtitle = Instance.new("TextLabel")
+        wtitle.Size = UDim2.new(1, 0, 0, 30); wtitle.BackgroundColor3 = Color3.fromRGB(120, 40, 40)
+        wtitle.Text = "捕捉结果 (截图发我)"; wtitle.TextColor3 = Color3.new(1, 1, 1); wtitle.Font = Enum.Font.GothamBold
+        wtitle.Parent = win
+        Instance.new("UICorner", wtitle).CornerRadius = UDim.new(0, 8)
+        
+        local wscroll = Instance.new("ScrollingFrame")
+        wscroll.Size = UDim2.new(1, -12, 1, -40); wscroll.Position = UDim2.fromOffset(6, 34)
+        wscroll.BackgroundTransparency = 1; wscroll.CanvasSize = UDim2.new(0, 0, 0, 0); wscroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+        wscroll.Parent = win
+        
+        local wtext = Instance.new("TextLabel")
+        wtext.Size = UDim2.new(1, -6, 0, 0); wtext.AutomaticSize = Enum.AutomaticSize.Y
+        wtext.BackgroundTransparency = 1; wtext.Text = table.concat(L, "\n"); wtext.TextColor3 = Color3.fromRGB(220, 220, 230)
+        wtext.Font = Enum.Font.Code; wtext.TextSize = 11; wtext.TextXAlignment = Enum.TextXAlignment.Left; wtext.TextYAlignment = Enum.TextYAlignment.Top; wtext.TextWrapped = true
+        wtext.Parent = wscroll
+    end)
 end
 
 -- ---------- 原生 BillboardGui ESP ----------
@@ -260,51 +224,24 @@ local function buildESP(plr)
     g.Parent = espGui
 
     local nm = Instance.new("TextLabel")
-    nm.Size = UDim2.new(1, 0, 0, 16)
-    nm.BackgroundTransparency = 1
-    nm.TextColor3 = Color3.new(1, 1, 1)
-    nm.TextStrokeTransparency = 0
-    nm.Font = Enum.Font.GothamBold
-    nm.TextSize = 12
-    nm.Text = plr.Name
-    nm.Parent = g
+    nm.Size = UDim2.new(1, 0, 0, 16); nm.BackgroundTransparency = 1; nm.TextColor3 = Color3.new(1, 1, 1)
+    nm.TextStrokeTransparency = 0; nm.Font = Enum.Font.GothamBold; nm.TextSize = 12; nm.Text = plr.Name; nm.Parent = g
 
     local ds = Instance.new("TextLabel")
-    ds.Size = UDim2.new(1, 0, 0, 14)
-    ds.Position = UDim2.fromOffset(0, 16)
-    ds.BackgroundTransparency = 1
-    ds.TextColor3 = Color3.fromRGB(200, 200, 200)
-    ds.TextStrokeTransparency = 0
-    ds.TextSize = 11
-    ds.Parent = g
+    ds.Size = UDim2.new(1, 0, 0, 14); ds.Position = UDim2.fromOffset(0, 16); ds.BackgroundTransparency = 1
+    ds.TextColor3 = Color3.fromRGB(200, 200, 200); ds.TextStrokeTransparency = 0; ds.TextSize = 11; ds.Parent = g
 
-    -- 优化：缩短血条，增加百分比
     local barBg = Instance.new("Frame")
-    barBg.Size = UDim2.fromOffset(40, 4)
-    barBg.Position = UDim2.new(0.5, -28, 0, 32) -- 居中偏左，给文本留出空间
-    barBg.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-    barBg.BorderSizePixel = 0
-    barBg.Visible = false
-    barBg.Parent = g
+    barBg.Size = UDim2.fromOffset(24, 3); barBg.Position = UDim2.new(0.5, -16, 0, 32)
+    barBg.BackgroundColor3 = Color3.fromRGB(60, 60, 60); barBg.BorderSizePixel = 0; barBg.Visible = false; barBg.Parent = g
 
     local bar = Instance.new("Frame")
-    bar.Size = UDim2.fromScale(1, 1)
-    bar.BackgroundColor3 = Color3.fromRGB(0, 220, 100)
-    bar.BorderSizePixel = 0
-    bar.Parent = barBg
+    bar.Size = UDim2.fromScale(1, 1); bar.BackgroundColor3 = Color3.fromRGB(0, 220, 100); bar.BorderSizePixel = 0; bar.Parent = barBg
 
     local hpText = Instance.new("TextLabel")
-    hpText.Size = UDim2.fromOffset(40, 14)
-    hpText.Position = UDim2.new(0.5, 14, 0, 27) -- 放在血条右侧
-    hpText.BackgroundTransparency = 1
-    hpText.TextColor3 = Color3.new(1, 1, 1)
-    hpText.TextStrokeTransparency = 0
-    hpText.TextSize = 10
-    hpText.Font = Enum.Font.GothamBold
-    hpText.Text = "100%"
-    hpText.TextXAlignment = Enum.TextXAlignment.Left
-    hpText.Visible = false
-    hpText.Parent = g
+    hpText.Size = UDim2.fromOffset(30, 14); hpText.Position = UDim2.new(0.5, 10, 0, 27); hpText.BackgroundTransparency = 1
+    hpText.TextColor3 = Color3.new(1, 1, 1); hpText.TextStrokeTransparency = 0; hpText.TextSize = 9; hpText.Font = Enum.Font.GothamBold
+    hpText.Text = "100%"; hpText.TextXAlignment = Enum.TextXAlignment.Left; hpText.Visible = false; hpText.Parent = g
 
     espData[plr] = { gui = g, name = nm, dist = ds, bar = bar, barBg = barBg, hpText = hpText }
 end
@@ -316,7 +253,6 @@ Players.PlayerRemoving:Connect(function(p)
     espData[p] = nil
 end)
 
--- ---------- 渲染循环 ----------
 local frameCount = 0
 RunService.RenderStepped:Connect(function()
     frameCount = frameCount + 1
@@ -332,16 +268,12 @@ RunService.RenderStepped:Connect(function()
                 data.gui.Enabled = true
                 data.gui.Adornee = hrp
                 data.dist.Text = math.floor((Camera.CFrame.Position - hrp.Position).Magnitude) .. " studs"
-                
                 if CFG.ESPRole then
-                    local role = getRoleLabel(plr)
-                    data.name.Text = "[" .. role .. "] " .. plr.Name
+                    data.name.Text = "[" .. getRoleLabel(plr) .. "] " .. plr.Name
                 else
                     data.name.Text = plr.Name
                 end
-
-                data.barBg.Visible = CFG.ESPHealth
-                data.hpText.Visible = CFG.ESPHealth
+                data.barBg.Visible = CFG.ESPHealth; data.hpText.Visible = CFG.ESPHealth
                 if CFG.ESPHealth then
                     local hpRatio = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
                     data.bar.Size = UDim2.fromScale(hpRatio, 1)
@@ -355,7 +287,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ---------- 主循环 ----------
 RunService.Heartbeat:Connect(function()
     local char = LP.Character
     if not char then return end
@@ -370,18 +301,17 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- ---------- 按钮构建 ----------
 addLabel("── 透视功能 ──")
 addToggle("透视 玩家名字", "ESP")
 addToggle("透视 血条百分比", "ESPHealth")
 addToggle("透视 中文职业", "ESPRole")
 
-addLabel("── 自身状态 ──")
-addButton("深度扫描界面进度条", deepScanSelf, Color3.fromRGB(120, 80, 160))
+addLabel("── 终极抓取 ──")
+addButton("开始监听状态变化", catchChanges, Color3.fromRGB(180, 50, 100))
 
 addLabel("── 自身修改 ──")
 addToggle("移动加速", "Speed")
 addToggle("高跳", "Jump")
 addToggle("穿墙 (Noclip)", "Noclip")
 
-print("[Ninja Panel v12] 已加载")
+print("[Ninja Panel v13] 启动")
