@@ -1,5 +1,5 @@
 -- ============================================
--- Ninja Panel v25 (精准网络过滤)
+-- Ninja Panel v26 (终极版 · 锁定 PlayerEvent)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -32,7 +32,7 @@ icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = fa
 local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v25 (精准拦截)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
+title.BorderSizePixel = 0; title.Text = "Ninja v26 (终极拦截)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
 local function mkTitleBtn(text, xoff, cb)
@@ -51,7 +51,7 @@ scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main
 local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
 
 local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 36); statusBar.Position = UDim2.new(0, 6, 1, -42)
-statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "等待开启精准拦截"
+statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "等待开启状态抓取"
 statusBar.TextColor3 = Color3.fromRGB(0, 255, 150); statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12
 statusBar.Parent = main; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
 
@@ -78,70 +78,46 @@ local function getRoleLabel(plr)
 end
 
 -- ==========================================
--- 核心：极度精准的 Hook 过滤
+-- 核心：监听 PlayerEvent 并提取数值
 -- ==========================================
-local NetLogs = {}
+local currentStamina = "未知"
+local currentHunger = "未知"
+local eventCount = 0
 
-local function startFilteredHook()
+local function startStateHook()
     if not hookmetamethod then statusBar.Text = "执行器不支持 Hook" return end
     
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
         
-        -- 只拦截发送给服务器的事件
-        if not checkcaller() and (method == "FireServer" or method == "InvokeServer") then
-            local evName = self.Name
-            local evLower = evName:lower()
-            
-            -- 【拉黑】过滤掉所有移动、旋转、视角相关的包
-            if evLower:find("rot") or evLower:find("pos") or evLower:find("move") or evLower:find("char") or evLower:find("ping") or evLower:find("cam") then
-                return oldNamecall(self, ...)
-            end
-            
-            -- 【过滤数值】只抓 0-100 之间的数字
+        -- 只抓 PlayerEvent 的网络包
+        if not checkcaller() and (method == "FireServer" or method == "InvokeServer") and self.Name == "PlayerEvent" then
             local args = {...}
-            for _, v in ipairs(args) do
-                if type(v) == "number" and v >= 0 and v <= 100 then
-                    local logStr = "发包: " .. evName .. " -> " .. tostring(v)
-                    if not table.find(NetLogs, logStr) then
-                        table.insert(NetLogs, logStr)
-                        if #NetLogs > 50 then table.remove(NetLogs, 1) end
-                    end
-                    break
-                end
+            -- 我们截图里看到，耐力是从 48, 47 往下掉的
+            if type(args[1]) == "number" and args[1] >= 0 and args[1] <= 100 then
+                currentStamina = tostring(math.floor(args[1]))
+                eventCount = eventCount + 1
+            end
+            -- 如果游戏饥饿值也在发，可能是 args[2] 等
+            if type(args[2]) == "number" and args[2] >= 0 and args[2] <= 100 then
+                currentHunger = tostring(math.floor(args[2]))
             end
         end
         
         return oldNamecall(self, ...)
     end)
-    statusBar.Text = "✔ 精准拦截已开启，请去跑动"
+    statusBar.Text = "✔ 监听已开启"
 end
 
-local function showLogs()
-    local L = {"===== 过滤后的网络日志 ====="}
-    if #NetLogs == 0 then
-        table.insert(L, "没抓到！说明这些状态不是发给服务器的，而是服务器直接发给你的UI。")
-    else
-        for i, log in ipairs(NetLogs) do table.insert(L, log) end
+-- 实时刷新底部文本
+task.spawn(function()
+    while task.wait(0.5) do
+        if eventCount > 0 then
+            statusBar.Text = "🍗 饥饿: " .. currentHunger .. "  |  ⚡ 耐力: " .. currentStamina
+        end
     end
-    
-    local oldWin = mainGui:FindFirstChild("NetWin"); if oldWin then oldWin:Destroy() end
-    local win = Instance.new("Frame"); win.Size = UDim2.fromOffset(340, 320); win.Position = UDim2.fromScale(0.5, 0.5); win.AnchorPoint = Vector2.new(0.5, 0.5)
-    win.BackgroundColor3 = Color3.fromRGB(15, 15, 20); win.Parent = mainGui; Instance.new("UICorner", win).CornerRadius = UDim.new(0, 8)
-    local wtitle = Instance.new("TextLabel"); wtitle.Size = UDim2.new(1, 0, 0, 30); wtitle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-    wtitle.Text = "过滤后结果"; wtitle.TextColor3 = Color3.new(1, 1, 1); wtitle.Font = Enum.Font.GothamBold; wtitle.Parent = win
-    Instance.new("UICorner", wtitle).CornerRadius = UDim.new(0, 8)
-    local wclose = Instance.new("TextButton"); wclose.Size = UDim2.fromOffset(28, 28); wclose.Position = UDim2.new(1, -30, 0, 1)
-    wclose.BackgroundColor3 = Color3.fromRGB(120, 40, 40); wclose.Text = "×"; wclose.TextColor3 = Color3.new(1, 1, 1); wclose.Parent = win
-    Instance.new("UICorner", wclose).CornerRadius = UDim.new(0, 6); wclose.MouseButton1Click:Connect(function() win:Destroy() end)
-    local wscroll = Instance.new("ScrollingFrame"); wscroll.Size = UDim2.new(1, -12, 1, -40); wscroll.Position = UDim2.fromOffset(6, 34)
-    wscroll.BackgroundTransparency = 1; wscroll.CanvasSize = UDim2.new(0, 0, 0, 0); wscroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; wscroll.Parent = win
-    local wtext = Instance.new("TextLabel"); wtext.Size = UDim2.new(1, -6, 0, 0); wtext.AutomaticSize = Enum.AutomaticSize.Y
-    wtext.BackgroundTransparency = 1; wtext.Text = table.concat(L, "\n"); wtext.TextColor3 = Color3.fromRGB(220, 220, 230)
-    wtext.Font = Enum.Font.Code; wtext.TextSize = 11; wtext.TextXAlignment = Enum.TextXAlignment.Left; wtext.TextYAlignment = Enum.TextYAlignment.Top
-    wtext.TextWrapped = true; wtext.Parent = wscroll
-end
+end)
 
 -- ---------- 原生 BillboardGui ESP (极短血条) ----------
 local espData = {}
@@ -184,7 +160,6 @@ addToggle("透视 玩家名字", "ESP")
 addToggle("透视 血条比例", "ESPHealth")
 addToggle("透视 中文职业", "ESPRole")
 
-addButton("1. 开启精准拦截", startFilteredHook, Color3.fromRGB(50, 150, 200))
-addButton("2. 查看过滤后日志", showLogs, Color3.fromRGB(180, 50, 100))
+addButton("开启状态网络抓取", startStateHook, Color3.fromRGB(50, 150, 200))
 
-print("[Ninja Panel v25] 已加载")
+print("[Ninja Panel v26] 终极版已加载")
