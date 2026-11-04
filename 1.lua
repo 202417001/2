@@ -1,21 +1,28 @@
 -- ============================================
--- Ninja Panel v2
--- 新增：面板缩放、反作弊友好传送
+-- Ninja Panel v3
+-- 修复 toggle / 最小化图标 / 默认全关 / 角色前缀
 -- ============================================
 
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local CollectionService = game:GetService("CollectionService")
 local LP         = Players.LocalPlayer
 local Camera     = workspace.CurrentCamera
 
+-- 全部默认关闭
 local CFG = {
-    ESP = false, ESPHealth = true,
-    Speed = false, SpeedVal = 60,
-    Jump = false, JumpVal = 120,
+    ESP = false,
+    ESPHealth = false,
+    ESPRole = false,
+    Speed = false, SpeedVal = 20,
+    Jump = false, JumpVal = 60,
     Noclip = false,
     Scale = 1.0,
-    TeleMode = "fast",   -- fast / slow
+    TeleMode = "slow",
 }
+
+-- 手动角色映射：[玩家名] = "角色"
+local ROLE_MAP = {}
 
 -- ---------- GUI ----------
 local old = LP:WaitForChild("PlayerGui"):FindFirstChild("NinjaPanel")
@@ -28,7 +35,7 @@ gui.IgnoreGuiInset = true
 gui.Parent = LP:WaitForChild("PlayerGui")
 
 local main = Instance.new("Frame")
-main.Size = UDim2.fromOffset(320, 480)
+main.Size = UDim2.fromOffset(320, 520)
 main.Position = UDim2.fromScale(0.02, 0.2)
 main.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
 main.BorderSizePixel = 0
@@ -37,23 +44,50 @@ main.Draggable = true
 main.Parent = gui
 Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
 
--- 关键：UIScale 挂在 main 上，缩放整个面板
 local uiScale = Instance.new("UIScale")
 uiScale.Scale = 1
 uiScale.Parent = main
 
+-- ---------- 最小化图标 ----------
+local icon = Instance.new("TextButton")
+icon.Size = UDim2.fromOffset(46, 46)
+icon.Position = UDim2.fromOffset(12, 240)
+icon.BackgroundColor3 = Color3.fromRGB(40, 40, 52)
+icon.Text = "N"
+icon.TextColor3 = Color3.new(1, 1, 1)
+icon.Font = Enum.Font.GothamBold
+icon.TextSize = 20
+icon.Visible = false
+icon.Active = true
+icon.Draggable = true
+icon.Parent = gui
+Instance.new("UICorner", icon).CornerRadius = UDim.new(1, 0)
+local stroke = Instance.new("UIStroke", icon)
+stroke.Color = Color3.fromRGB(0, 180, 120)
+stroke.Thickness = 2
+
+icon.MouseButton1Click:Connect(function()
+    main.Visible = true
+    icon.Visible = false
+end)
+
+local function minimize()
+    main.Visible = false
+    icon.Visible = true
+end
+
+-- ---------- 标题栏 ----------
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 32)
 title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
 title.BorderSizePixel = 0
-title.Text = "Ninja Panel v2"
+title.Text = "Ninja Panel v3"
 title.TextColor3 = Color3.new(1, 1, 1)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 16
 title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
--- 缩放按钮（标题栏右侧）
 local function mkTitleBtn(text, xoff, cb)
     local b = Instance.new("TextButton")
     b.Size = UDim2.fromOffset(28, 28)
@@ -77,7 +111,7 @@ end
 
 mkTitleBtn("−", -94, function() applyScale(CFG.Scale - 0.1) end)
 mkTitleBtn("+", -64, function() applyScale(CFG.Scale + 0.1) end)
-mkTitleBtn("×", -32, function() gui.Enabled = false end)
+mkTitleBtn("▁", -32, minimize)
 
 local scroll = Instance.new("ScrollingFrame")
 scroll.Size = UDim2.new(1, -12, 1, -44)
@@ -85,7 +119,7 @@ scroll.Position = UDim2.fromOffset(6, 38)
 scroll.BackgroundTransparency = 1
 scroll.BorderSizePixel = 0
 scroll.ScrollBarThickness = 4
-scroll.CanvasSize = UDim2.new(0, 0, 0, 700)
+scroll.CanvasSize = UDim2.new(0, 0, 0, 900)
 scroll.Parent = main
 
 local layout = Instance.new("UIListLayout")
@@ -93,6 +127,7 @@ layout.Padding = UDim.new(0, 6)
 layout.SortOrder = Enum.SortOrder.LayoutOrder
 layout.Parent = scroll
 
+-- ---------- 按钮 / toggle（修好的写法） ----------
 local function addButton(text, cb, color)
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(1, -6, 0, 34)
@@ -109,7 +144,8 @@ local function addButton(text, cb, color)
 end
 
 local function addToggle(name, key)
-    local b = addButton((CFG[key] and "[ON] " or "[OFF] ") .. name, function()
+    local b
+    b = addButton((CFG[key] and "[ON] " or "[OFF] ") .. name, function()
         CFG[key] = not CFG[key]
         b.Text = (CFG[key] and "[ON] " or "[OFF] ") .. name
         b.BackgroundColor3 = CFG[key] and Color3.fromRGB(0, 140, 80) or Color3.fromRGB(50, 50, 60)
@@ -118,11 +154,77 @@ local function addToggle(name, key)
     return b
 end
 
--- ---------- 反作弊友好传送 ----------
--- 思路：把大位移拆成多帧小步，每帧位移压在阈值内
--- fast: 每帧约 12 studs，60fps 下 ~720 studs/s（能过部分检测）
--- slow: 每帧约 3 studs，60fps 下 ~180 studs/s（接近正常跑步，几乎不触发）
+-- ---------- 角色读取 ----------
+local function getRoleLabel(plr)
+    if ROLE_MAP[plr.Name] then return ROLE_MAP[plr.Name] end
+    local char = plr.Character
+    if char then
+        for _, obj in ipairs(char:GetChildren()) do
+            if obj:IsA("StringValue") then
+                local n = obj.Name:lower()
+                if n:find("role") or n:find("job") or n:find("职业") or n:find("角色") then
+                    return tostring(obj.Value)
+                end
+            end
+        end
+        for k, v in pairs(char:GetAttributes()) do
+            local kn = k:lower()
+            if kn:find("role") or kn:find("job") then
+                return tostring(v)
+            end
+        end
+    end
+    for _, obj in ipairs(plr:GetChildren()) do
+        if obj:IsA("StringValue") then
+            local n = obj.Name:lower()
+            if n:find("role") or n:find("job") then
+                return tostring(obj.Value)
+            end
+        end
+    end
+    for k, v in pairs(plr:GetAttributes()) do
+        local kn = k:lower()
+        if kn:find("role") or kn:find("job") then
+            return tostring(v)
+        end
+    end
+    return nil
+end
 
+-- ---------- 角色扫描（把控制台输出发我） ----------
+local function scanRoles()
+    print("===== 角色扫描开始 =====")
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LP then
+            print("--- " .. p.Name .. " / " .. p.DisplayName .. " ---")
+            for k, v in pairs(p:GetAttributes()) do
+                print("  [Player Attr] " .. k .. " = " .. tostring(v))
+            end
+            for _, tag in ipairs(CollectionService:GetTags(p)) do
+                print("  [Player Tag] " .. tag)
+            end
+            local char = p.Character
+            if char then
+                for k, v in pairs(char:GetAttributes()) do
+                    print("  [Char Attr] " .. k .. " = " .. tostring(v))
+                end
+                for _, tag in ipairs(CollectionService:GetTags(char)) do
+                    print("  [Char Tag] " .. tag)
+                end
+                for _, obj in ipairs(char:GetDescendants()) do
+                    if obj:IsA("StringValue") then
+                        print("  [StringValue] " .. obj:GetFullName() .. " = " .. tostring(obj.Value))
+                    elseif obj:IsA("TextLabel") and obj.Text ~= "" then
+                        print("  [TextLabel] " .. obj:GetFullName() .. " = " .. tostring(obj.Text))
+                    end
+                end
+            end
+        end
+    end
+    print("===== 扫描结束，复制以上全部发我 =====")
+end
+
+-- ---------- 传送（平滑，强反作弊下可能仍被踢） ----------
 local function getHRP()
     local char = LP.Character
     if not char then return nil end
@@ -132,46 +234,21 @@ end
 local function smoothTeleport(targetCFrame)
     local hrp = getHRP()
     if not hrp then return end
-
     local startPos = hrp.Position
     local targetPos = targetCFrame.Position
     local dist = (targetPos - startPos).Magnitude
     if dist < 1 then return end
-
-    local stepSize = (CFG.TeleMode == "slow") and 3 or 12
+    local stepSize = (CFG.TeleMode == "slow") and 3 or 10
     local steps = math.max(1, math.ceil(dist / stepSize))
-
     for i = 1, steps do
         local cur = getHRP()
         if not cur then return end
         local t = i / steps
-        local pos = startPos:Lerp(targetPos, t)
-        -- 保留目标朝向，位置插值
-        cur.CFrame = CFrame.new(pos, targetPos + (targetCFrame.LookVector * 5))
+        cur.CFrame = CFrame.new(startPos:Lerp(targetPos, t))
         RunService.Heartbeat:Wait()
     end
 end
 
--- 传送到最近玩家
-local function tpToNearestPlayer()
-    local myHRP = getHRP()
-    if not myHRP then return end
-    local closest, cd = nil, math.huge
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LP and p.Character then
-            local h = p.Character:FindFirstChild("HumanoidRootPart")
-            if h then
-                local d = (h.Position - myHRP.Position).Magnitude
-                if d < cd then cd, closest = d, h end
-            end
-        end
-    end
-    if closest then
-        smoothTeleport(closest.CFrame * CFrame.new(0, 3, 0))
-    end
-end
-
--- 传送到指定玩家
 local function tpToPlayer(plr)
     if not plr or plr == LP then return end
     local char = plr.Character
@@ -184,11 +261,28 @@ end
 -- ---------- 功能按钮 ----------
 addToggle("ESP 玩家名字", "ESP")
 addToggle("ESP 血条", "ESPHealth")
+addToggle("ESP 角色前缀", "ESPRole")
 
-addButton("传送：最近玩家", function() tpToNearestPlayer() end, Color3.fromRGB(0, 120, 80))
+addButton("扫描所有玩家角色", scanRoles, Color3.fromRGB(120, 80, 160))
+
+addButton("传送：最近玩家", function()
+    local myHRP = getHRP()
+    if not myHRP then return end
+    local closest, cd = nil, math.huge
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LP and p.Character then
+            local h = p.Character:FindFirstChild("HumanoidRootPart")
+            if h then
+                local d = (h.Position - myHRP.Position).Magnitude
+                if d < cd then cd, closest = d, h end
+            end
+        end
+    end
+    if closest then smoothTeleport(closest.CFrame * CFrame.new(0, 3, 0)) end
+end, Color3.fromRGB(0, 120, 80))
 
 local modeBtn
-modeBtn = addButton("传送模式：快速", function()
+modeBtn = addButton("传送模式：隐蔽", function()
     CFG.TeleMode = (CFG.TeleMode == "fast") and "slow" or "fast"
     modeBtn.Text = "传送模式：" .. (CFG.TeleMode == "fast" and "快速" or "隐蔽")
 end, Color3.fromRGB(80, 80, 120))
@@ -203,12 +297,14 @@ addToggle("穿墙 Noclip", "Noclip")
 
 -- ---------- ESP ----------
 local espCache = {}
+
 local function buildESP(plr)
     if plr == LP then return end
     local g = Instance.new("BillboardGui")
     g.Name = "esp_" .. plr.Name
-    g.Size = UDim2.fromOffset(100, 50)
+    g.Size = UDim2.fromOffset(140, 50)
     g.AlwaysOnTop = true
+    g.Enabled = false
     g.Parent = LP:WaitForChild("PlayerGui")
 
     local name = Instance.new("TextLabel")
@@ -243,7 +339,7 @@ local function buildESP(plr)
     bar.BorderSizePixel = 0
     bar.Parent = barBg
 
-    espCache[plr] = { gui = g, name = name, dist = dist, bar = bar }
+    espCache[plr] = { gui = g, name = name, dist = dist, bar = bar, barBg = barBg }
 end
 
 Players.PlayerAdded:Connect(function(p) task.wait(1) buildESP(p) end)
@@ -254,8 +350,14 @@ Players.PlayerRemoving:Connect(function(p)
 end)
 
 RunService.RenderStepped:Connect(function()
+    if not CFG.ESP then
+        for _, v in pairs(espCache) do
+            if v.gui.Parent then v.gui.Enabled = false end
+        end
+        return
+    end
     for plr, data in pairs(espCache) do
-        if not CFG.ESP or not plr.Character then
+        if not plr.Character then
             data.gui.Enabled = false
         else
             local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
@@ -264,11 +366,11 @@ RunService.RenderStepped:Connect(function()
                 data.gui.Enabled = true
                 data.gui.Adornee = hrp
                 data.dist.Text = string.format("%d studs", (hrp.Position - Camera.CFrame.Position).Magnitude)
+                local role = CFG.ESPRole and getRoleLabel(plr) or nil
+                data.name.Text = role and ("[" .. role .. "] " .. plr.Name) or plr.Name
+                data.barBg.Visible = CFG.ESPHealth
                 if CFG.ESPHealth then
-                    data.bar.Parent.Visible = true
                     data.bar.Size = UDim2.fromScale(math.clamp(hum.Health / hum.MaxHealth, 0, 1), 1)
-                else
-                    data.bar.Parent.Visible = false
                 end
             else
                 data.gui.Enabled = false
@@ -283,10 +385,8 @@ RunService.Heartbeat:Connect(function()
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum then return end
-
     if CFG.Speed then hum.WalkSpeed = CFG.SpeedVal end
     if CFG.Jump  then hum.JumpPower = CFG.JumpVal end
-
     if CFG.Noclip then
         for _, part in ipairs(char:GetDescendants()) do
             if part:IsA("BasePart") and part.CanCollide then
@@ -322,4 +422,4 @@ refreshList()
 Players.PlayerAdded:Connect(function() task.wait(1) refreshList() end)
 Players.PlayerRemoving:Connect(function() task.wait(0.5) refreshList() end)
 
-print("[Ninja Panel v2] loaded")
+print("[Ninja Panel v3] loaded")
