@@ -1,6 +1,6 @@
 -- ============================================
--- Ninja Panel v3
--- 修复 toggle / 最小化图标 / 默认全关 / 角色前缀
+-- Ninja Panel v4
+-- 移除传送；角色扫描器加强
 -- ============================================
 
 local Players    = game:GetService("Players")
@@ -9,7 +9,6 @@ local CollectionService = game:GetService("CollectionService")
 local LP         = Players.LocalPlayer
 local Camera     = workspace.CurrentCamera
 
--- 全部默认关闭
 local CFG = {
     ESP = false,
     ESPHealth = false,
@@ -18,10 +17,8 @@ local CFG = {
     Jump = false, JumpVal = 60,
     Noclip = false,
     Scale = 1.0,
-    TeleMode = "slow",
 }
 
--- 手动角色映射：[玩家名] = "角色"
 local ROLE_MAP = {}
 
 -- ---------- GUI ----------
@@ -35,7 +32,7 @@ gui.IgnoreGuiInset = true
 gui.Parent = LP:WaitForChild("PlayerGui")
 
 local main = Instance.new("Frame")
-main.Size = UDim2.fromOffset(320, 520)
+main.Size = UDim2.fromOffset(320, 500)
 main.Position = UDim2.fromScale(0.02, 0.2)
 main.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
 main.BorderSizePixel = 0
@@ -48,7 +45,7 @@ local uiScale = Instance.new("UIScale")
 uiScale.Scale = 1
 uiScale.Parent = main
 
--- ---------- 最小化图标 ----------
+-- 最小化图标
 local icon = Instance.new("TextButton")
 icon.Size = UDim2.fromOffset(46, 46)
 icon.Position = UDim2.fromOffset(12, 240)
@@ -76,12 +73,12 @@ local function minimize()
     icon.Visible = true
 end
 
--- ---------- 标题栏 ----------
+-- 标题栏
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 32)
 title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
 title.BorderSizePixel = 0
-title.Text = "Ninja Panel v3"
+title.Text = "Ninja Panel v4"
 title.TextColor3 = Color3.new(1, 1, 1)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 16
@@ -119,7 +116,7 @@ scroll.Position = UDim2.fromOffset(6, 38)
 scroll.BackgroundTransparency = 1
 scroll.BorderSizePixel = 0
 scroll.ScrollBarThickness = 4
-scroll.CanvasSize = UDim2.new(0, 0, 0, 900)
+scroll.CanvasSize = UDim2.new(0, 0, 0, 700)
 scroll.Parent = main
 
 local layout = Instance.new("UIListLayout")
@@ -127,7 +124,6 @@ layout.Padding = UDim.new(0, 6)
 layout.SortOrder = Enum.SortOrder.LayoutOrder
 layout.Parent = scroll
 
--- ---------- 按钮 / toggle（修好的写法） ----------
 local function addButton(text, cb, color)
     local b = Instance.new("TextButton")
     b.Size = UDim2.new(1, -6, 0, 34)
@@ -157,105 +153,117 @@ end
 -- ---------- 角色读取 ----------
 local function getRoleLabel(plr)
     if ROLE_MAP[plr.Name] then return ROLE_MAP[plr.Name] end
-    local char = plr.Character
-    if char then
-        for _, obj in ipairs(char:GetChildren()) do
-            if obj:IsA("StringValue") then
-                local n = obj.Name:lower()
-                if n:find("role") or n:find("job") or n:find("职业") or n:find("角色") then
-                    return tostring(obj.Value)
+
+    local function check(obj)
+        if not obj then return nil end
+        for k, v in pairs(obj:GetAttributes()) do
+            local kn = k:lower()
+            if kn:find("role") or kn:find("job") or kn:find("职业") or kn:find("角色") or kn:find("class") or kn:find("team") then
+                if type(v) == "string" and v ~= "" then return v end
+            end
+        end
+        for _, tag in ipairs(CollectionService:GetTags(obj)) do
+            if tag:lower():find("role") or tag:lower():find("job") then return tag end
+        end
+        for _, c in ipairs(obj:GetChildren()) do
+            if c:IsA("StringValue") then
+                local n = c.Name:lower()
+                if n:find("role") or n:find("job") or n:find("职业") or n:find("角色") or n:find("class") or n:find("team") then
+                    if c.Value ~= "" then return c.Value end
                 end
             end
         end
-        for k, v in pairs(char:GetAttributes()) do
-            local kn = k:lower()
-            if kn:find("role") or kn:find("job") then
-                return tostring(v)
-            end
-        end
+        return nil
     end
-    for _, obj in ipairs(plr:GetChildren()) do
-        if obj:IsA("StringValue") then
-            local n = obj.Name:lower()
-            if n:find("role") or n:find("job") then
-                return tostring(obj.Value)
-            end
-        end
-    end
-    for k, v in pairs(plr:GetAttributes()) do
-        local kn = k:lower()
-        if kn:find("role") or kn:find("job") then
-            return tostring(v)
-        end
-    end
-    return nil
+
+    return check(plr.Character) or check(plr)
 end
 
--- ---------- 角色扫描（把控制台输出发我） ----------
+-- ---------- 深度扫描器（加强） ----------
+local function deepScan(plr, root, depth, prefix, out)
+    if depth > 4 or not root then return end
+    for _, c in ipairs(root:GetChildren()) do
+        local full = prefix .. c.Name
+        local cls = c.ClassName
+        if c:IsA("StringValue") then
+            table.insert(out, full .. "  [" .. cls .. "] = " .. tostring(c.Value))
+        elseif c:IsA("TextLabel") then
+            if c.Text ~= "" then
+                table.insert(out, full .. "  [" .. cls .. "] text = " .. tostring(c.Text))
+            end
+        elseif c:IsA("IntValue") or c:IsA("NumberValue") or c:IsA("BoolValue") then
+            table.insert(out, full .. "  [" .. cls .. "] = " .. tostring(c.Value))
+        end
+        if depth < 4 then
+            deepScan(plr, c, depth + 1, full .. ".", out)
+        end
+    end
+end
+
 local function scanRoles()
-    print("===== 角色扫描开始 =====")
+    print("===== 深度角色扫描开始 =====")
+
+    -- 1. 全局服务里找
+    local services = { "ReplicatedStorage", "ServerStorage", "Workspace", "Players", "Teams" }
+    for _, sn in ipairs(services) do
+        local svc = game:GetService(sn)
+        if svc then
+            local found = {}
+            for _, d in ipairs(svc:GetDescendants()) do
+                if d:IsA("StringValue") then
+                    local n = d.Name:lower()
+                    if n:find("role") or n:find("job") or n:find("职业") or n:find("角色") then
+                        table.insert(found, d:GetFullName() .. " = " .. tostring(d.Value))
+                        if #found >= 30 then break end
+                    end
+                end
+            end
+            if #found > 0 then
+                print("--- [" .. sn .. "] 中找到 " .. #found .. " 个可疑 StringValue ---")
+                for _, line in ipairs(found) do print("  " .. line) end
+            end
+        end
+    end
+
+    -- 2. Teams 检查
+    local Teams = game:GetService("Teams")
+    print("--- Teams 队伍列表 ---")
+    for _, t in ipairs(Teams:GetTeams()) do
+        print("  [Team] " .. t.Name .. " / Color=" .. tostring(t.TeamColor))
+    end
+
+    -- 3. 每个玩家深挖
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LP then
-            print("--- " .. p.Name .. " / " .. p.DisplayName .. " ---")
+            print("========== " .. p.Name .. " (" .. p.DisplayName .. ") ==========")
+            print("  Team = " .. tostring(p.Team and p.Team.Name))
+            print("  Neutral = " .. tostring(p.Neutral))
             for k, v in pairs(p:GetAttributes()) do
                 print("  [Player Attr] " .. k .. " = " .. tostring(v))
             end
             for _, tag in ipairs(CollectionService:GetTags(p)) do
                 print("  [Player Tag] " .. tag)
             end
+
             local char = p.Character
             if char then
+                local out = {}
+                deepScan(p, char, 1, "", out)
+                for _, line in ipairs(out) do
+                    print("  " .. line)
+                end
                 for k, v in pairs(char:GetAttributes()) do
                     print("  [Char Attr] " .. k .. " = " .. tostring(v))
                 end
                 for _, tag in ipairs(CollectionService:GetTags(char)) do
                     print("  [Char Tag] " .. tag)
                 end
-                for _, obj in ipairs(char:GetDescendants()) do
-                    if obj:IsA("StringValue") then
-                        print("  [StringValue] " .. obj:GetFullName() .. " = " .. tostring(obj.Value))
-                    elseif obj:IsA("TextLabel") and obj.Text ~= "" then
-                        print("  [TextLabel] " .. obj:GetFullName() .. " = " .. tostring(obj.Text))
-                    end
-                end
+            else
+                print("  (无角色)")
             end
         end
     end
-    print("===== 扫描结束，复制以上全部发我 =====")
-end
-
--- ---------- 传送（平滑，强反作弊下可能仍被踢） ----------
-local function getHRP()
-    local char = LP.Character
-    if not char then return nil end
-    return char:FindFirstChild("HumanoidRootPart")
-end
-
-local function smoothTeleport(targetCFrame)
-    local hrp = getHRP()
-    if not hrp then return end
-    local startPos = hrp.Position
-    local targetPos = targetCFrame.Position
-    local dist = (targetPos - startPos).Magnitude
-    if dist < 1 then return end
-    local stepSize = (CFG.TeleMode == "slow") and 3 or 10
-    local steps = math.max(1, math.ceil(dist / stepSize))
-    for i = 1, steps do
-        local cur = getHRP()
-        if not cur then return end
-        local t = i / steps
-        cur.CFrame = CFrame.new(startPos:Lerp(targetPos, t))
-        RunService.Heartbeat:Wait()
-    end
-end
-
-local function tpToPlayer(plr)
-    if not plr or plr == LP then return end
-    local char = plr.Character
-    if not char then return end
-    local h = char:FindFirstChild("HumanoidRootPart")
-    if not h then return end
-    smoothTeleport(h.CFrame * CFrame.new(0, 3, 0))
+    print("===== 扫描结束，请复制控制台全部内容 =====")
 end
 
 -- ---------- 功能按钮 ----------
@@ -263,29 +271,31 @@ addToggle("ESP 玩家名字", "ESP")
 addToggle("ESP 血条", "ESPHealth")
 addToggle("ESP 角色前缀", "ESPRole")
 
-addButton("扫描所有玩家角色", scanRoles, Color3.fromRGB(120, 80, 160))
+addButton("深度扫描角色", scanRoles, Color3.fromRGB(120, 80, 160))
 
-addButton("传送：最近玩家", function()
-    local myHRP = getHRP()
-    if not myHRP then return end
-    local closest, cd = nil, math.huge
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LP and p.Character then
-            local h = p.Character:FindFirstChild("HumanoidRootPart")
-            if h then
-                local d = (h.Position - myHRP.Position).Magnitude
-                if d < cd then cd, closest = d, h end
-            end
+addButton("手动设置角色", function()
+    -- 简单输入框
+    local Input = Instance.new("TextBox")
+    Input.Size = UDim2.fromOffset(280, 36)
+    Input.Position = UDim2.fromScale(0.5, 0.5)
+    Input.AnchorPoint = Vector2.new(0.5, 0.5)
+    Input.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+    Input.TextColor3 = Color3.new(1, 1, 1)
+    Input.PlaceholderText = "玩家名=角色，如: Bob=Policeman"
+    Input.Text = ""
+    Input.Parent = gui
+    Instance.new("UICorner", Input).CornerRadius = UDim.new(0, 6)
+
+    Input.FocusLost:Connect(function()
+        local txt = Input.Text
+        local name, role = txt:match("^(.-)=(.*)$")
+        if name and role and name ~= "" then
+            ROLE_MAP[name] = role
+            print("[Role] 已设置 " .. name .. " = " .. role)
         end
-    end
-    if closest then smoothTeleport(closest.CFrame * CFrame.new(0, 3, 0)) end
-end, Color3.fromRGB(0, 120, 80))
-
-local modeBtn
-modeBtn = addButton("传送模式：隐蔽", function()
-    CFG.TeleMode = (CFG.TeleMode == "fast") and "slow" or "fast"
-    modeBtn.Text = "传送模式：" .. (CFG.TeleMode == "fast" and "快速" or "隐蔽")
-end, Color3.fromRGB(80, 80, 120))
+        Input:Destroy()
+    end)
+end, Color3.fromRGB(80, 120, 80))
 
 addButton("刷新角色", function()
     if LP.Character then LP.Character:BreakJoints() end
@@ -302,7 +312,7 @@ local function buildESP(plr)
     if plr == LP then return end
     local g = Instance.new("BillboardGui")
     g.Name = "esp_" .. plr.Name
-    g.Size = UDim2.fromOffset(140, 50)
+    g.Size = UDim2.fromOffset(160, 50)
     g.AlwaysOnTop = true
     g.Enabled = false
     g.Parent = LP:WaitForChild("PlayerGui")
@@ -396,30 +406,4 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- ---------- 玩家列表 ----------
-local listLabel = Instance.new("TextLabel")
-listLabel.Size = UDim2.new(1, -6, 0, 20)
-listLabel.BackgroundTransparency = 1
-listLabel.Text = "玩家列表（点击传送）"
-listLabel.TextColor3 = Color3.fromRGB(160, 160, 180)
-listLabel.Font = Enum.Font.GothamBold
-listLabel.TextSize = 13
-listLabel.TextXAlignment = Enum.TextXAlignment.Left
-listLabel.Parent = scroll
-
-local function refreshList()
-    for _, c in ipairs(scroll:GetChildren()) do
-        if c:IsA("TextButton") and c:GetAttribute("isPlayer") then c:Destroy() end
-    end
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LP then
-            local b = addButton(p.Name, function() tpToPlayer(p) end, Color3.fromRGB(45, 55, 80))
-            b:SetAttribute("isPlayer", true)
-        end
-    end
-end
-refreshList()
-Players.PlayerAdded:Connect(function() task.wait(1) refreshList() end)
-Players.PlayerRemoving:Connect(function() task.wait(0.5) refreshList() end)
-
-print("[Ninja Panel v3] loaded")
+print("[Ninja Panel v4] loaded")
