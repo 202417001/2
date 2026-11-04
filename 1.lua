@@ -1,5 +1,5 @@
 -- ============================================
--- Ninja Panel v11 (中文修复 · 核心级隐身 · 深度扫描恢复)
+-- Ninja Panel v12 (血条优化 · 图标物理抓取)
 -- ============================================
 
 local Players           = game:GetService("Players")
@@ -13,7 +13,6 @@ local CFG = {
     Noclip = false, Scale = 1.0,
 }
 
--- 职业中英文映射
 local CN_ROLE_MAP = {
     ["Chef"] = "厨师", ["Civilian"] = "平民", ["Delivery"] = "快递员",
     ["Farmer"] = "农夫", ["Fire"] = "消防员", ["Medical"] = "医生",
@@ -24,18 +23,10 @@ local CN_ROLE_MAP = {
 -- ---------- 核心级 GUI 隐藏处理 (防封) ----------
 local function getHiddenGui(name)
     local g = Instance.new("ScreenGui")
-    g.Name = name
-    g.ResetOnSpawn = false
-    g.IgnoreGuiInset = true
-    -- 优先塞进 CoreGui 并保护
-    if syn and syn.protect_gui then
-        syn.protect_gui(g)
-        g.Parent = game:GetService("CoreGui")
-    elseif gethui then
-        g.Parent = gethui()
-    else
-        g.Parent = LP:WaitForChild("PlayerGui") -- 兜底
-    end
+    g.Name = name; g.ResetOnSpawn = false; g.IgnoreGuiInset = true
+    if syn and syn.protect_gui then syn.protect_gui(g); g.Parent = game:GetService("CoreGui")
+    elseif gethui then g.Parent = gethui()
+    else g.Parent = LP:WaitForChild("PlayerGui") end
     return g
 end
 
@@ -64,7 +55,7 @@ local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v11"; title.TextColor3 = Color3.new(1, 1, 1)
+title.BorderSizePixel = 0; title.Text = "Ninja v12"; title.TextColor3 = Color3.new(1, 1, 1)
 title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
@@ -129,37 +120,61 @@ end
 local function getRoleLabel(plr)
     if plr.Team then
         local tName = plr.Team.Name
-        if tName and tName ~= "" and tName ~= "Neutral" and tName ~= "???" then
+        if tName and tName ~= "" and tName ~= "Neutral" and tName ~= "???" and not tName:find("%?") then
             return CN_ROLE_MAP[tName] or tName
         end
     end
     return "平民"
 end
 
--- ---------- 状态抓取 (肉/鞋) ----------
+-- ---------- 状态抓取 (强力 UI + 物理比例) ----------
 local function getStatUI(keywords)
     local pg = LP:FindFirstChild("PlayerGui")
     if not pg then return nil end
+    
+    local bestNum = nil
+    local bestScale = nil
+    
     for _, obj in ipairs(pg:GetDescendants()) do
+        -- 1. 找文字
         if obj:IsA("TextLabel") and obj.Visible and obj.Text ~= "" then
             local text = obj.Text:lower()
             for _, kw in ipairs(keywords) do
                 if obj.Name:lower():find(kw) or text:find(kw) then
                     local num = text:match("(%d+)")
-                    if num then return tonumber(num) end
+                    if num then bestNum = tonumber(num) end
+                end
+            end
+        end
+        -- 2. 暴力抓进度条 (找左下角区域，且 Size.X.Scale 在 0-1 之间的 Frame/ImageLabel)
+        if (obj:IsA("Frame") or obj:IsA("ImageLabel")) and obj.Visible then
+            local pos = obj.AbsolutePosition
+            -- 粗略判断在屏幕左下角 (Y轴 > 屏幕高度 * 0.7)
+            if pos.Y > Camera.ViewportSize.Y * 0.7 then
+                local scale = obj.Size.X.Scale
+                if scale > 0 and scale <= 1 then
+                    local nameMatch = false
+                    for _, kw in ipairs(keywords) do
+                        if obj.Name:lower():find(kw) or (obj.Parent and obj.Parent.Name:lower():find(kw)) then
+                            nameMatch = true
+                        end
+                    end
+                    -- 如果名字匹配，或者名字叫 Bar 等，或者就默认抓取第一个符合比例的
+                    if nameMatch or obj.Name:lower():find("bar") then
+                        bestScale = math.floor(scale * 100)
+                    end
                 end
             end
         end
     end
-    return nil
+    return bestNum or bestScale
 end
 
 task.spawn(function()
     while task.wait(1) do
-        -- 肉/饥饿
+        -- 穷举关键字
         local hunger = getStatUI({"hunger", "food", "饥饿", "饱食", "肉"}) or "未知"
-        -- 鞋/耐力
-        local stamina = getStatUI({"stamina", "energy", "耐力", "体力", "精力", "鞋"}) or "未知"
+        local stamina = getStatUI({"stamina", "energy", "耐力", "体力", "精力", "鞋", "sprint"}) or "未知"
         
         local function format(v)
             if type(v) == "number" then
@@ -176,22 +191,17 @@ end)
 local function deepScanSelf()
     local L = {}
     local function w(s) table.insert(L, tostring(s)) end
-    w("===== 自身状态深度扫描 =====")
-    local char = LP.Character
-    if char then
-        w("--- Character 内的值 ---")
-        for _, c in ipairs(char:GetDescendants()) do
-            if c:IsA("NumberValue") or c:IsA("IntValue") or c:IsA("StringValue") then
-                w("  " .. c.Name .. " = " .. tostring(c.Value))
-            end
-        end
-    end
+    w("===== 界面元素尺寸扫描 =====")
+    w("(查找左下角有变化的 Frame/ImageLabel)")
+    
     local pg = LP:FindFirstChild("PlayerGui")
     if pg then
-        w("--- PlayerGui 界面上的数字 ---")
         for _, c in ipairs(pg:GetDescendants()) do
-            if c:IsA("TextLabel") and c.Text ~= "" then
-                if c.Text:match("%d") then w("  [" .. c.Name .. "] = " .. tostring(c.Text)) end
+            if (c:IsA("Frame") or c:IsA("ImageLabel")) and c.Visible then
+                local scale = c.Size.X.Scale
+                if scale > 0 and scale < 1 then
+                    w("  [比例] " .. c.Name .. " (父级:" .. c.Parent.Name .. ") = " .. tostring(math.floor(scale*100)) .. "%")
+                end
             end
         end
     end
@@ -235,7 +245,7 @@ local function deepScanSelf()
     wtext.TextWrapped = true; wtext.Parent = wscroll
 end
 
--- ---------- 原生 BillboardGui ESP (塞进 CoreGui 防封) ----------
+-- ---------- 原生 BillboardGui ESP ----------
 local espData = {}
 
 local function buildESP(plr)
@@ -247,7 +257,7 @@ local function buildESP(plr)
     g.Size = UDim2.fromOffset(160, 50)
     g.AlwaysOnTop = true
     g.Enabled = false
-    g.Parent = espGui -- 挂在核心 GUI 里
+    g.Parent = espGui
 
     local nm = Instance.new("TextLabel")
     nm.Size = UDim2.new(1, 0, 0, 16)
@@ -268,9 +278,10 @@ local function buildESP(plr)
     ds.TextSize = 11
     ds.Parent = g
 
+    -- 优化：缩短血条，增加百分比
     local barBg = Instance.new("Frame")
-    barBg.Size = UDim2.new(1, 0, 0, 4)
-    barBg.Position = UDim2.fromOffset(0, 32)
+    barBg.Size = UDim2.fromOffset(40, 4)
+    barBg.Position = UDim2.new(0.5, -28, 0, 32) -- 居中偏左，给文本留出空间
     barBg.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
     barBg.BorderSizePixel = 0
     barBg.Visible = false
@@ -282,7 +293,20 @@ local function buildESP(plr)
     bar.BorderSizePixel = 0
     bar.Parent = barBg
 
-    espData[plr] = { gui = g, name = nm, dist = ds, bar = bar, barBg = barBg }
+    local hpText = Instance.new("TextLabel")
+    hpText.Size = UDim2.fromOffset(40, 14)
+    hpText.Position = UDim2.new(0.5, 14, 0, 27) -- 放在血条右侧
+    hpText.BackgroundTransparency = 1
+    hpText.TextColor3 = Color3.new(1, 1, 1)
+    hpText.TextStrokeTransparency = 0
+    hpText.TextSize = 10
+    hpText.Font = Enum.Font.GothamBold
+    hpText.Text = "100%"
+    hpText.TextXAlignment = Enum.TextXAlignment.Left
+    hpText.Visible = false
+    hpText.Parent = g
+
+    espData[plr] = { gui = g, name = nm, dist = ds, bar = bar, barBg = barBg, hpText = hpText }
 end
 
 Players.PlayerAdded:Connect(function(p) task.wait(1) buildESP(p) end)
@@ -292,11 +316,11 @@ Players.PlayerRemoving:Connect(function(p)
     espData[p] = nil
 end)
 
--- ---------- 渲染循环 (降频) ----------
+-- ---------- 渲染循环 ----------
 local frameCount = 0
 RunService.RenderStepped:Connect(function()
     frameCount = frameCount + 1
-    if frameCount % 2 ~= 0 then return end -- 每2帧刷新
+    if frameCount % 2 ~= 0 then return end
 
     for plr, data in pairs(espData) do
         if not CFG.ESP or not plr.Character then
@@ -317,10 +341,12 @@ RunService.RenderStepped:Connect(function()
                 end
 
                 data.barBg.Visible = CFG.ESPHealth
+                data.hpText.Visible = CFG.ESPHealth
                 if CFG.ESPHealth then
                     local hpRatio = math.clamp(hum.Health / math.max(hum.MaxHealth, 1), 0, 1)
                     data.bar.Size = UDim2.fromScale(hpRatio, 1)
                     data.bar.BackgroundColor3 = Color3.fromRGB(255 * (1 - hpRatio), 255 * hpRatio, 0)
+                    data.hpText.Text = math.floor(hpRatio * 100) .. "%"
                 end
             else
                 data.gui.Enabled = false
@@ -347,15 +373,15 @@ end)
 -- ---------- 按钮构建 ----------
 addLabel("── 透视功能 ──")
 addToggle("透视 玩家名字", "ESP")
-addToggle("透视 血条", "ESPHealth")
+addToggle("透视 血条百分比", "ESPHealth")
 addToggle("透视 中文职业", "ESPRole")
 
 addLabel("── 自身状态 ──")
-addButton("深度扫描自身状态", deepScanSelf, Color3.fromRGB(120, 80, 160))
+addButton("深度扫描界面进度条", deepScanSelf, Color3.fromRGB(120, 80, 160))
 
 addLabel("── 自身修改 ──")
 addToggle("移动加速", "Speed")
 addToggle("高跳", "Jump")
 addToggle("穿墙 (Noclip)", "Noclip")
 
-print("[Ninja Panel v11] 已加载，中文职业修复版")
+print("[Ninja Panel v12] 已加载")
