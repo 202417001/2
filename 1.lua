@@ -1,5 +1,5 @@
 -- ============================================
--- Ninja Panel v20 (无Hook · 雷达扫描)
+-- Ninja Panel v22 (网络事件拦截版)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -32,7 +32,7 @@ icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = fa
 local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v20 (雷达版)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
+title.BorderSizePixel = 0; title.Text = "Ninja v22 (网络拦截)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
 local function mkTitleBtn(text, xoff, cb)
@@ -50,12 +50,9 @@ scroll.BackgroundTransparency = 1; scroll.BorderSizePixel = 0; scroll.ScrollBarT
 scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main
 local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
 
-local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 48); statusBar.Position = UDim2.new(0, 6, 1, -54)
-statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "雷达扫描中..."
-statusBar.TextColor3 = Color3.fromRGB(0, 255, 150); statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 11
-statusBar.TextWrapped = true; statusBar.TextYAlignment = Enum.TextYAlignment.Top; statusBar.Parent = main
-Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
-local statusPad = Instance.new("UIPadding", statusBar); statusPad.PaddingTop = UDim.new(0, 6); statusPad.PaddingLeft = UDim.new(0, 6)
+local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 36); statusBar.Position = UDim2.new(0, 6, 1, -42)
+statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "未开启监听"; statusBar.TextColor3 = Color3.fromRGB(0, 255, 150)
+statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12; statusBar.Parent = main; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
 
 local function addButton(text, cb, color)
     local b = Instance.new("TextButton"); b.Size = UDim2.new(1, -6, 0, 34); b.BackgroundColor3 = color or Color3.fromRGB(50, 50, 60)
@@ -85,52 +82,78 @@ local function getRoleLabel(plr)
 end
 
 -- ==========================================
--- 雷达扫描核心 (不卡顿)
+-- 核心：RemoteEvent 拦截
 -- ==========================================
-local radarTargets = {}
+local NetLogs = {}
 
--- 定期更新雷达列表 (每2秒一次)
-task.spawn(function()
-    while task.wait(2) do
-        radarTargets = {}
-        local pg = LP:FindFirstChild("PlayerGui")
-        if pg then
-            for _, obj in ipairs(pg:GetDescendants()) do
-                if obj.Visible and (obj:IsA("Frame") or obj:IsA("ImageLabel")) then
-                    -- 判断是不是目标
-                    local nameLower = obj.Name:lower()
-                    local parentLower = obj.Parent and obj.Parent.Name:lower() or ""
-                    if nameLower:find("bar") or nameLower:find("stamina") or nameLower:find("hunger") or nameLower:find("flare") or nameLower:find("middle") then
-                        table.insert(radarTargets, obj)
-                    end
+local function startHook()
+    if not getconnections then
+        statusBar.Text = "执行器不支持 getconnections"
+        return
+    end
+    
+    statusBar.Text = "正在扫描所有网络事件..."
+    local count = 0
+    
+    -- 遍历整个游戏的远程事件
+    for _, obj in ipairs(game:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("UnreliableRemoteEvent") then
+            local conns = getconnections(obj.OnClientEvent)
+            for _, conn in ipairs(conns) do
+                -- 备份原函数并 Hook
+                local oldFunc = conn.Function
+                if oldFunc then
+                    conn:Disconnect()
+                    obj.OnClientEvent:Connect(function(...)
+                        local args = {...}
+                        local strArgs = {}
+                        for i, v in ipairs(args) do
+                            if type(v) == "number" or type(v) == "string" then
+                                table.insert(strArgs, tostring(v))
+                            elseif type(v) == "table" then
+                                table.insert(strArgs, "[Table]")
+                            end
+                        end
+                        
+                        local logStr = obj:GetFullName() .. " -> " .. table.concat(strArgs, ", ")
+                        table.insert(NetLogs, logStr)
+                        if #NetLogs > 50 then table.remove(NetLogs, 1) end
+                        
+                        -- 把原函数接回去，保证游戏不卡
+                        oldFunc(...)
+                    end)
+                    count = count + 1
                 end
             end
         end
     end
-end)
+    statusBar.Text = "Hook 完成，捕获了 " .. count .. " 个事件"
+end
 
--- 底部实时刷新 (每 0.2 秒一次)
-task.spawn(function()
-    while task.wait(0.2) do
-        if #radarTargets == 0 then
-            statusBar.Text = "未扫描到可疑组件..."
-        else
-            local txt = {}
-            for i, obj in ipairs(radarTargets) do
-                if i > 4 then break end -- 最多显示 4 个，防乱
-                local val = ""
-                if obj:IsA("Frame") or obj:IsA("ImageLabel") then
-                    val = "比例:" .. tostring(math.floor(obj.Size.X.Scale * 100)) .. "%"
-                end
-                table.insert(txt, "[" .. obj.Name .. "] " .. val)
-            end
-            statusBar.Text = table.concat(txt, "\n")
-        end
+local function showLogs()
+    local L = {"===== 网络拦截日志 =====", "如果游戏正常，但下面数字没动，说明数据不是通过网络发的。", ""}
+    for i, log in ipairs(NetLogs) do
+        table.insert(L, log)
     end
-end)
+    
+    local oldWin = mainGui:FindFirstChild("NetWin"); if oldWin then oldWin:Destroy() end
+    local win = Instance.new("Frame"); win.Size = UDim2.fromOffset(340, 320); win.Position = UDim2.fromScale(0.5, 0.5); win.AnchorPoint = Vector2.new(0.5, 0.5)
+    win.BackgroundColor3 = Color3.fromRGB(15, 15, 20); win.Parent = mainGui; Instance.new("UICorner", win).CornerRadius = UDim.new(0, 8)
+    local wtitle = Instance.new("TextLabel"); wtitle.Size = UDim2.new(1, 0, 0, 30); wtitle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+    wtitle.Text = "拦截结果 (截图发我)"; wtitle.TextColor3 = Color3.new(1, 1, 1); wtitle.Font = Enum.Font.GothamBold; wtitle.Parent = win
+    Instance.new("UICorner", wtitle).CornerRadius = UDim.new(0, 8)
+    local wclose = Instance.new("TextButton"); wclose.Size = UDim2.fromOffset(28, 28); wclose.Position = UDim2.new(1, -30, 0, 1)
+    wclose.BackgroundColor3 = Color3.fromRGB(120, 40, 40); wclose.Text = "×"; wclose.TextColor3 = Color3.new(1, 1, 1); wclose.Parent = win
+    Instance.new("UICorner", wclose).CornerRadius = UDim.new(0, 6); wclose.MouseButton1Click:Connect(function() win:Destroy() end)
+    local wscroll = Instance.new("ScrollingFrame"); wscroll.Size = UDim2.new(1, -12, 1, -40); wscroll.Position = UDim2.fromOffset(6, 34)
+    wscroll.BackgroundTransparency = 1; wscroll.CanvasSize = UDim2.new(0, 0, 0, 0); wscroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; wscroll.Parent = win
+    local wtext = Instance.new("TextLabel"); wtext.Size = UDim2.new(1, -6, 0, 0); wtext.AutomaticSize = Enum.AutomaticSize.Y
+    wtext.BackgroundTransparency = 1; wtext.Text = table.concat(L, "\n"); wtext.TextColor3 = Color3.fromRGB(220, 220, 230)
+    wtext.Font = Enum.Font.Code; wtext.TextSize = 11; wtext.TextXAlignment = Enum.TextXAlignment.Left; wtext.TextYAlignment = Enum.TextYAlignment.Top
+    wtext.TextWrapped = true; wtext.Parent = wscroll
+end
 
-
--- ---------- 原生 BillboardGui ESP (极短血条) ----------
+-- ---------- ESP ----------
 local espData = {}
 local function buildESP(plr)
     if plr == LP then return end; if espData[plr] then return end
@@ -178,9 +201,13 @@ addToggle("透视 玩家名字", "ESP")
 addToggle("透视 血条百分比", "ESPHealth")
 addToggle("透视 中文职业", "ESPRole")
 
+addLabel("── 网络抓包 ──")
+addButton("1. 开启网络监听", startHook, Color3.fromRGB(200, 150, 50))
+addButton("2. 查看拦截日志", showLogs, Color3.fromRGB(180, 50, 100))
+
 addLabel("── 自身修改 ──")
 addToggle("移动加速", "Speed")
 addToggle("高跳", "Jump")
 addToggle("穿墙 (Noclip)", "Noclip")
 
-print("[Ninja Panel v20] 已加载，雷达扫描中")
+print("[Ninja Panel v22] 已加载")
