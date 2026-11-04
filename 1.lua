@@ -1,5 +1,6 @@
 -- ============================================
--- Ninja Panel v27 (属性锁死版)
+-- Ninja Panel v28 (暴力恢复版)
+-- 依赖 v27 的状态监听
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -32,7 +33,7 @@ icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = fa
 local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v27 (属性锁死)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
+title.BorderSizePixel = 0; title.Text = "Ninja v28 (暴力恢复)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
 local function mkTitleBtn(text, xoff, cb)
@@ -51,7 +52,7 @@ scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main
 local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
 
 local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 36); statusBar.Position = UDim2.new(0, 6, 1, -42)
-statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "等待拦截..."
+statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "等待开启..."
 statusBar.TextColor3 = Color3.fromRGB(0, 255, 150); statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12
 statusBar.Parent = main; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
 
@@ -78,55 +79,58 @@ local function getRoleLabel(plr)
 end
 
 -- ==========================================
--- 终极核心：拦截并篡改 PlayerEvent
+-- 核心：疯狂发送恢复事件
 -- ==========================================
-local realStamina = "未知"
-local realHunger = "未知"
+local currentStamina = "未知"
+local lastStaminaTime = tick()
+local staminaDropRate = 0
 
-local function startLock()
-    if not hookmetamethod then statusBar.Text = "执行器不支持 Hook" return end
+-- 定时疯狂发包，告诉服务器你要恢复
+local function startSpam()
+    local rs = game:GetService("ReplicatedStorage")
+    local ev = rs:FindFirstChild("Remote") and rs.Remote:FindFirstChild("PlayerEvent")
     
-    local oldNamecall
-    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-        local method = getnamecallmethod()
-        
-        if not checkcaller() and (method == "FireServer" or method == "InvokeServer") and self.Name == "PlayerEvent" then
-            local args = {...}
-            
-            -- 抓取真实的数值 (参数 3)
-            if type(args[3]) == "number" and args[3] >= 0 and args[3] <= 100 then
-                realStamina = tostring(math.floor(args[3]))
-                -- 如果开启锁死，强制改成 100
-                if CFG.LockStamina then
-                    args[3] = 100
-                end
+    if not ev then statusBar.Text = "找不到 PlayerEvent" return end
+    
+    statusBar.Text = "✔ 正在疯狂刷恢复包..."
+    
+    task.spawn(function()
+        while task.wait(0.1) do
+            if CFG.LockStamina then
+                -- 暴力发送状态 3，数值为 100
+                pcall(function() ev:FireServer(3, 100) end)
+                pcall(function() ev:FireServer(3, 999) end)
             end
-            
-            -- 抓取参数 2 (饥饿或状态)
-            if type(args[2]) == "number" and args[2] >= 0 and args[2] <= 100 then
-                realHunger = tostring(math.floor(args[2]))
-            end
-            
-            -- 放行修改后的包
-            return oldNamecall(self, unpack(args))
         end
-        
-        return oldNamecall(self, ...)
     end)
-    statusBar.Text = "✔ 监听已开启"
 end
 
--- 定时刷新底部文本
+-- 拦截真实数值，计算下降速度
+local function startHook()
+    if not hookmetamethod then statusBar.Text = "不支持 Hook" return end
+    local oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        if not checkcaller() and method == "FireServer" and self.Name == "PlayerEvent" then
+            local args = {...}
+            if type(args[3]) == "number" and args[3] >= 0 and args[3] <= 100 then
+                currentStamina = tostring(math.floor(args[3]))
+            end
+        end
+        return oldNamecall(self, ...)
+    end)
+    statusBar.Text = "✔ Hook 已开启，监控中"
+end
+
 task.spawn(function()
     while task.wait(0.5) do
-        if realStamina ~= "未知" then
-            local lockStr = CFG.LockStamina and " (已锁 100)" or ""
-            statusBar.Text = "🍗 饥饿: " .. realHunger .. " | ⚡ 真实耐力: " .. realStamina .. lockStr
+        if currentStamina ~= "未知" then
+            local lockStr = CFG.LockStamina and " (强刷中)" or ""
+            statusBar.Text = "🍗 饥饿: " .. currentHunger .. " | ⚡ 真实耐力: " .. currentStamina .. lockStr
         end
     end
 end)
 
--- ---------- 原生 BillboardGui ESP (极短血条) ----------
+-- ---------- ESP 和安全 UI ----------
 local espData = {}
 local function buildESP(plr)
     if plr == LP then return end; if espData[plr] then return end
@@ -167,7 +171,8 @@ addToggle("透视 玩家名字", "ESP")
 addToggle("透视 血条比例", "ESPHealth")
 addToggle("透视 中文职业", "ESPRole")
 
-addButton("开启网络 Hook", startLock, Color3.fromRGB(50, 150, 200))
-addToggle("锁死耐力值 100", "LockStamina")
+addButton("开启数值 Hook", startHook, Color3.fromRGB(50, 150, 200))
+addButton("开启暴力恢复", startSpam, Color3.fromRGB(200, 100, 50))
+addToggle("锁死耐力 (强刷)", "LockStamina")
 
-print("[Ninja Panel v27] 已加载")
+print("[Ninja Panel v28] 已加载")
