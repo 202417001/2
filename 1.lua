@@ -1,5 +1,5 @@
 -- ============================================
--- Ninja Panel v37 (武器网络打击 · 原地秒杀)
+-- Ninja Panel v38 (全图搜刮打击 · 强制读取)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -11,7 +11,7 @@ local CFG = {
     ESP = false, ESPHealth = false, ESPRole = false,
     Speed = false, SpeedVal = 18, 
     FakeSpeed = false,
-    Aura = false, AuraRange = 30, AutoSwing = false,
+    Aura = false, AuraRange = 30,
     Scale = 1.0,
 }
 local CN_ROLE_MAP = { ["Chef"]="厨师",["Civilian"]="平民",["Delivery"]="快递员",["Farmer"]="农夫",["Fire"]="消防员",["Medical"]="医生",["Police"]="警察",["Prisoner"]="囚犯",["Road Service"]="路政",["Transit"]="公交司机" }
@@ -38,7 +38,7 @@ icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = fa
 local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v37 (网络打击)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
+title.BorderSizePixel = 0; title.Text = "Ninja v38 (全图打击)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
 local function mkTitleBtn(text, xoff, cb)
@@ -57,7 +57,7 @@ scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main
 local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
 
 local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 36); statusBar.Position = UDim2.new(0, 6, 1, -42)
-statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "拿着武器点击下方扫描"
+statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "点击 1 扫荡网络包"
 statusBar.TextColor3 = Color3.fromRGB(0, 255, 150); statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12
 statusBar.Parent = main; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
 
@@ -76,73 +76,85 @@ local function addToggle(name, key)
 end
 
 -- ==========================================
--- 核心：武器 Remote 扫描与轰炸
+-- 核心：全图搜刮网络包
 -- ==========================================
-local currentWeaponRemotes = {}
+local attackRemotes = {}
+local logList = {}
 
-local function scanWeapon()
-    currentWeaponRemotes = {}
-    local char = LP.Character
-    if not char then statusBar.Text = "找不到角色" return end
-    local tool = char:FindFirstChildOfClass("Tool")
-    if not tool then statusBar.Text = "请先手持武器！" return end
+local function scanAllRemotes()
+    attackRemotes = {}
+    table.clear(logList)
     
-    local count = 0
-    for _, obj in ipairs(tool:GetDescendants()) do
+    -- 1. 搜 ReplicatedStorage
+    local rs = game:GetService("ReplicatedStorage")
+    for _, obj in ipairs(rs:GetDescendants()) do
         if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-            table.insert(currentWeaponRemotes, obj)
-            count = count + 1
+            local n = obj.Name:lower()
+            if n:find("hit") or n:find("attack") or n:find("damage") or n:find("combat") or n:find("sword") or n:find("gun") or n:find("shoot") then
+                table.insert(attackRemotes, obj)
+                table.insert(logList, "[发] " .. obj:GetFullName())
+            end
         end
     end
     
-    if count > 0 then
-        statusBar.Text = "✔ 成功提取武器网络事件 " .. count .. " 个"
-    else
-        statusBar.Text = "武器内没有 Remote，可能是纯服务端判定"
+    -- 2. 搜 Character (有些放在本地)
+    local char = LP.Character
+    if char then
+        for _, obj in ipairs(char:GetDescendants()) do
+            if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) and not table.find(attackRemotes, obj) then
+                table.insert(attackRemotes, obj)
+                table.insert(logList, "[身] " .. obj:GetFullName())
+            end
+        end
     end
+
+    if #attackRemotes > 0 then
+        statusBar.Text = "✔ 找到了 " .. #attackRemotes .. " 个攻击包"
+    else
+        statusBar.Text = "没找到，尝试直接用全服发包"
+    end
+    
+    -- 弹窗显示找到了什么
+    local oldWin = mainGui:FindFirstChild("ScanWin"); if oldWin then oldWin:Destroy() end
+    local win = Instance.new("Frame"); win.Size = UDim2.fromOffset(320, 240); win.Position = UDim2.fromScale(0.5, 0.5); win.AnchorPoint = Vector2.new(0.5, 0.5)
+    win.BackgroundColor3 = Color3.fromRGB(15, 15, 20); win.Parent = mainGui; Instance.new("UICorner", win).CornerRadius = UDim.new(0, 8)
+    
+    local wtitle = Instance.new("TextLabel"); wtitle.Size = UDim2.new(1, 0, 0, 30); wtitle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
+    wtitle.Text = "扫到的攻击包"; wtitle.TextColor3 = Color3.new(1, 1, 1); wtitle.Parent = win
+    local wclose = Instance.new("TextButton"); wclose.Size = UDim2.fromOffset(28, 28); wclose.Position = UDim2.new(1, -30, 0, 1)
+    wclose.BackgroundColor3 = Color3.fromRGB(120, 40, 40); wclose.Text = "×"; wclose.TextColor3 = Color3.new(1, 1, 1); wclose.Parent = win
+    wclose.MouseButton1Click:Connect(function() win:Destroy() end)
+    
+    local wtxt = Instance.new("TextLabel"); wtxt.Size = UDim2.new(1, -10, 1, -40); wtxt.Position = UDim2.fromOffset(5, 35)
+    wtxt.BackgroundTransparency = 1; wtxt.Text = table.concat(logList, "\n"); wtxt.TextColor3 = Color3.new(1, 1, 1)
+    wtxt.Font = Enum.Font.Code; wtxt.TextSize = 11; wtxt.TextXAlignment = Enum.TextXAlignment.Left; wtxt.TextYAlignment = Enum.TextYAlignment.Top
+    wtxt.TextWrapped = true; wtxt.Parent = win
 end
 
+-- 自动发射器
 task.spawn(function()
-    while task.wait(0.15) do -- 稍微降频，防止服务器踢人
+    while task.wait(0.1) do
         if CFG.Aura then
             local myChar = LP.Character
             if not myChar then continue end
             local myHRP = myChar:FindFirstChild("HumanoidRootPart")
-            local tool = myChar:FindFirstChildOfClass("Tool")
-            if not myHRP or not tool then continue end
             
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr ~= LP and plr.Character then
-                    local tgtHRP = plr.Character:FindFirstChild("HumanoidRootPart")
-                    local tgtHum = plr.Character:FindFirstChildOfClass("Humanoid")
-                    
-                    if tgtHRP and tgtHum and tgtHum.Health > 0 then
-                        local dist = (myHRP.Position - tgtHRP.Position).Magnitude
-                        if dist <= CFG.AuraRange then
-                            -- 1. 自动挥刀动画
-                            if CFG.AutoSwing then
-                                pcall(function() tool:Activate() end)
-                            end
-                            
-                            -- 2. 疯狂向武器内的所有网络事件发送目标
-                            for _, remote in ipairs(currentWeaponRemotes) do
-                                if remote:IsA("RemoteEvent") then
-                                    -- 不同的游戏参数不同，我们暴力尝试传 Humanoid 或 Character
-                                    pcall(function() remote:FireServer(tgtHum) end)
-                                    pcall(function() remote:FireServer(plr.Character) end)
-                                    pcall(function() remote:FireServer("Hit", tgtHum) end)
-                                    pcall(function() remote:FireServer(tgtHRP.Position) end)
-                                elseif remote:IsA("RemoteFunction") then
-                                    pcall(function() remote:InvokeServer(tgtHum) end)
+            -- 如果连一个包都没扫到，直接发送 "Hit" 字符串和位置给常见的包
+            if myHRP then
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr ~= LP and plr.Character then
+                        local tgtHRP = plr.Character:FindFirstChild("HumanoidRootPart")
+                        local tgtHum = plr.Character:FindFirstChildOfClass("Humanoid")
+                        if tgtHRP and tgtHum and tgtHum.Health > 0 then
+                            if (myHRP.Position - tgtHRP.Position).Magnitude <= CFG.AuraRange then
+                                for _, remote in ipairs(attackRemotes) do
+                                    if remote:IsA("RemoteEvent") then
+                                        pcall(function() remote:FireServer(tgtHum) end)
+                                        pcall(function() remote:FireServer(plr.Character) end)
+                                        pcall(function() remote:FireServer(tgtHRP.Position) end)
+                                        pcall(function() remote:FireServer("hit", tgtHRP.Position) end)
+                                    end
                                 end
-                            end
-                            
-                            -- 3. 强制触碰兜底
-                            if firetouchinterest and tool:FindFirstChild("Handle") then
-                                pcall(function()
-                                    firetouchinterest(tool.Handle, tgtHRP, 0)
-                                    firetouchinterest(tool.Handle, tgtHRP, 1)
-                                end)
                             end
                         end
                     end
@@ -152,9 +164,7 @@ task.spawn(function()
     end
 end)
 
--- ==========================================
--- 速度与防检测逻辑 (18速度)
--- ==========================================
+-- 速度与防检测逻辑
 local oldIndex
 local function setupFakeSpeed()
     if not hookmetamethod then return end
@@ -177,9 +187,7 @@ RunService.Heartbeat:Connect(function()
     if CFG.Speed then hum.WalkSpeed = CFG.SpeedVal end
 end)
 
--- ==========================================
--- ESP 渲染
--- ==========================================
+-- ESP
 local function getRoleLabel(plr)
     if plr.Team then
         local tName = plr.Team.Name
@@ -224,19 +232,16 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ==========================================
--- UI 按钮构建
--- ==========================================
+-- UI 按钮
 addToggle("透视 玩家名字", "ESP")
 addToggle("透视 血条比例", "ESPHealth")
 addToggle("透视 中文职业", "ESPRole")
 
-local lbl1 = Instance.new("TextLabel"); lbl1.Size = UDim2.new(1, -6, 0, 22); lbl1.BackgroundTransparency = 1; lbl1.Text = "── 原地网络杀戮 ──"
+local lbl1 = Instance.new("TextLabel"); lbl1.Size = UDim2.new(1, -6, 0, 22); lbl1.BackgroundTransparency = 1; lbl1.Text = "── 全图网络打击 ──"
 lbl1.TextColor3 = Color3.fromRGB(160, 160, 180); lbl1.Font = Enum.Font.GothamBold; lbl1.TextSize = 13; lbl1.TextXAlignment = Enum.TextXAlignment.Left; lbl1.Parent = scroll
 
-addButton("1. 扫描手里武器的网络包", scanWeapon, Color3.fromRGB(50, 150, 200))
-addToggle("2. 开启原地疯狂打击", "Aura")
-addToggle("3. 自动挥刀动作", "AutoSwing")
+addButton("1. 全图扫荡攻击包", scanAllRemotes, Color3.fromRGB(50, 150, 200))
+addToggle("2. 开启疯狂轰炸", "Aura")
 
 local rangeBtn
 rangeBtn = addButton("打击范围: " .. CFG.AuraRange .. " 米", function()
@@ -251,4 +256,4 @@ lbl2.TextColor3 = Color3.fromRGB(160, 160, 180); lbl2.Font = Enum.Font.GothamBol
 addToggle("强制奔跑 (速度 18)", "Speed")
 addToggle("开启速度欺骗 (免耗耐力)", "FakeSpeed")
 
-print("[Ninja Panel v37] 网络打击版已加载")
+print("[Ninja Panel v38] 全图打击版已加载")
