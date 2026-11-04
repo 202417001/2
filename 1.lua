@@ -1,5 +1,5 @@
 -- ============================================
--- Ninja Panel v41 (液态玻璃 · 自动排版UI)
+-- Ninja Panel v43 (真·静默瞄准 · 纯正液态玻璃)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -28,114 +28,119 @@ local mainGui = getHiddenGui("MainPanel_" .. math.random(1000, 9999))
 local espGui = getHiddenGui("EspRender_" .. math.random(1000, 9999))
 
 -- ==========================================
--- 液态玻璃主面板
+-- 纯正液态玻璃 UI
 -- ==========================================
-local main = Instance.new("Frame")
-main.Size = UDim2.fromOffset(320, 480); main.Position = UDim2.fromScale(0.1, 0.2)
-main.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
-main.BackgroundTransparency = 0.2 -- 玻璃透明感
-main.BorderSizePixel = 0; main.Active = true; main.Draggable = true; main.Parent = mainGui
-Instance.new("UICorner", main).CornerRadius = UDim.new(0, 12)
+local shadow = Instance.new("Frame")
+shadow.Size = UDim2.fromOffset(330, 490); shadow.Position = UDim2.fromScale(0.1, 0.2)
+shadow.BackgroundColor3 = Color3.fromRGB(0, 0, 0); shadow.BackgroundTransparency = 0.5
+shadow.BorderSizePixel = 0; shadow.Parent = mainGui
+Instance.new("UICorner", shadow).CornerRadius = UDim.new(0, 16)
+local shadowBlur = Instance.new("ImageLabel", shadow)
+shadowBlur.Size = UDim2.new(1, 40, 1, 40); shadowBlur.Position = UDim2.fromOffset(-20, -20)
+shadowBlur.BackgroundTransparency = 1; shadowBlur.Image = "rbxassetid://5028857084"; shadowBlur.ImageColor3 = Color3.new(0,0,0)
+shadowBlur.ScaleType = Enum.ScaleType.Slice; shadowBlur.SliceCenter = Rect.new(24,24,276,276); shadowBlur.ZIndex = 1
 
--- 玻璃高光边框
+local main = Instance.new("Frame")
+main.Size = UDim2.fromOffset(320, 480); main.Position = shadow.Position
+main.BackgroundColor3 = Color3.fromRGB(30, 30, 40); main.BackgroundTransparency = 0.4
+main.BorderSizePixel = 0; main.Active = true; main.Draggable = true; main.Parent = mainGui; main.ZIndex = 2
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 16)
+
+local grad = Instance.new("UIGradient")
+grad.Rotation = 90
+grad.Color = ColorSequence.new{ColorSequenceKeypoint.new(0, Color3.fromRGB(255,255,255)),ColorSequenceKeypoint.new(1, Color3.fromRGB(120,120,150))}
+grad.Transparency = NumberSequence.new{NumberSequenceKeypoint.new(0, 0.8),NumberSequenceKeypoint.new(1, 1)}
+grad.Parent = main
+
 local stroke = Instance.new("UIStroke", main)
-stroke.Color = Color3.fromRGB(255, 255, 255)
-stroke.Transparency = 0.7
-stroke.Thickness = 1
+stroke.Color = Color3.fromRGB(255, 255, 255); stroke.Transparency = 0.6; stroke.Thickness = 1.5
 
 local uiScale = Instance.new("UIScale"); uiScale.Scale = 1; uiScale.Parent = main
 
--- 最小化图标
 local icon = Instance.new("TextButton"); icon.Size = UDim2.fromOffset(46, 46); icon.Position = UDim2.fromOffset(12, 240)
 icon.BackgroundColor3 = Color3.fromRGB(30, 30, 40); icon.Text = "N"; icon.TextColor3 = Color3.new(1, 1, 1); icon.Font = Enum.Font.GothamBold; icon.TextSize = 20
 icon.Visible = false; icon.Active = true; icon.Draggable = true; icon.Parent = mainGui; Instance.new("UICorner", icon).CornerRadius = UDim.new(1, 0)
-icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = false end)
-local function minimize() main.Visible = false; icon.Visible = true end
+icon.MouseButton1Click:Connect(function() main.Visible = true; shadow.Visible = true; icon.Visible = false end)
+local function minimize() main.Visible = false; shadow.Visible = false; icon.Visible = true end
 
--- 标题栏
-local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 36); title.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-title.BackgroundTransparency = 0.5; title.BorderSizePixel = 0; title.Text = "Ninja v41 Glass"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 15; title.Parent = main
-Instance.new("UICorner", title).CornerRadius = UDim.new(0, 12)
+local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 40); title.BackgroundTransparency = 1
+title.Text = "NINJA  PANEL"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
+title.ZIndex = 3
 
 local function mkTitleBtn(text, xoff, cb)
-    local b = Instance.new("TextButton"); b.Size = UDim2.fromOffset(28, 28); b.Position = UDim2.new(1, xoff, 0, 4)
-    b.BackgroundTransparency = 1; b.Text = text; b.TextColor3 = Color3.fromRGB(200, 200, 200)
-    b.Font = Enum.Font.GothamBold; b.TextSize = 18; b.Parent = main
+    local b = Instance.new("TextButton"); b.Size = UDim2.fromOffset(28, 28); b.Position = UDim2.new(1, xoff, 0, 6)
+    b.BackgroundTransparency = 1; b.Text = text; b.TextColor3 = Color3.fromRGB(255, 255, 255)
+    b.Font = Enum.Font.GothamBold; b.TextSize = 20; b.Parent = main; b.ZIndex = 3
     b.MouseButton1Click:Connect(cb); return b
 end
 mkTitleBtn("−", -94, function() uiScale.Scale = math.max(0.6, uiScale.Scale - 0.1) end)
 mkTitleBtn("+", -64, function() uiScale.Scale = math.min(1.8, uiScale.Scale + 0.1) end)
 mkTitleBtn("×", -32, minimize)
 
-local scroll = Instance.new("ScrollingFrame"); scroll.Size = UDim2.new(1, -12, 1, -100); scroll.Position = UDim2.fromOffset(6, 44)
+local scroll = Instance.new("ScrollingFrame"); scroll.Size = UDim2.new(1, -16, 1, -100); scroll.Position = UDim2.fromOffset(8, 46)
 scroll.BackgroundTransparency = 1; scroll.BorderSizePixel = 0; scroll.ScrollBarThickness = 2; scroll.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
-scroll.CanvasSize = UDim2.new(0, 0, 0, 0); scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main
-local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 8); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
-local padding = Instance.new("UIPadding", scroll); padding.PaddingLeft = UDim.new(0, 4); padding.PaddingRight = UDim.new(0, 4); padding.PaddingTop = UDim.new(0, 4)
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0); scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main; scroll.ZIndex = 3
+local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 10); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
 
-local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 36); statusBar.Position = UDim2.new(0, 6, 1, -42)
-statusBar.BackgroundColor3 = Color3.fromRGB(20, 20, 30); statusBar.BackgroundTransparency = 0.3; statusBar.BorderSizePixel = 0; statusBar.Text = "静默待命"
-statusBar.TextColor3 = Color3.fromRGB(0, 255, 150); statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12
-statusBar.Parent = main; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 8)
+local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -16, 0, 36); statusBar.Position = UDim2.new(0, 8, 1, -44)
+statusBar.BackgroundColor3 = Color3.fromRGB(10, 10, 15); statusBar.BackgroundTransparency = 0.5
+statusBar.BorderSizePixel = 0; statusBar.Text = "系统就绪"; statusBar.TextColor3 = Color3.fromRGB(0, 255, 150); statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12
+statusBar.Parent = main; statusBar.ZIndex = 3; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 8)
 
 -- ==========================================
--- 玻璃 UI 组件生成器
+-- 玻璃 UI 组件
 -- ==========================================
-local function createBaseRow(height)
+local function createGlassRow(height)
     local row = Instance.new("Frame")
     row.Size = UDim2.new(1, 0, 0, height)
-    row.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-    row.BackgroundTransparency = 0.3
-    row.BorderSizePixel = 0
-    row.Parent = scroll
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+    row.BackgroundColor3 = Color3.fromRGB(20, 20, 25); row.BackgroundTransparency = 0.4
+    row.BorderSizePixel = 0; row.Parent = scroll
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 10)
     local s = Instance.new("UIStroke", row); s.Color = Color3.new(1,1,1); s.Transparency = 0.85
     return row
 end
 
--- 开关组件（右侧）
 local function addGlassToggle(name, key)
-    local row = createBaseRow(40)
-    local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, -60, 1, 0); lbl.Position = UDim2.fromOffset(12, 0)
-    lbl.BackgroundTransparency = 1; lbl.Text = name; lbl.TextColor3 = Color3.fromRGB(240,240,240); lbl.Font = Enum.Font.Gotham; lbl.TextSize = 13; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
+    local row = createGlassRow(44)
+    local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, -70, 1, 0); lbl.Position = UDim2.fromOffset(12, 0)
+    lbl.BackgroundTransparency = 1; lbl.Text = name; lbl.TextColor3 = Color3.fromRGB(240,240,240); lbl.Font = Enum.Font.GothamMedium; lbl.TextSize = 13; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
 
-    local track = Instance.new("Frame"); track.Size = UDim2.fromOffset(36, 20); track.Position = UDim2.new(1, -48, 0.5, -10)
-    track.BackgroundColor3 = Color3.fromRGB(60, 60, 80); track.BorderSizePixel = 0; track.Parent = row; Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
-    local fill = Instance.new("Frame"); fill.Size = UDim2.new(0, 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 160, 90); fill.BorderSizePixel = 0; fill.Parent = track; Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-    local knob = Instance.new("Frame"); knob.Size = UDim2.fromOffset(16, 16); knob.Position = UDim2.new(0, 2, 0.5, -8); knob.BackgroundColor3 = Color3.new(1,1,1); knob.Parent = track; Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+    local track = Instance.new("Frame"); track.Size = UDim2.fromOffset(40, 22); track.Position = UDim2.new(1, -54, 0.5, -11)
+    track.BackgroundColor3 = Color3.fromRGB(50, 50, 60); track.BorderSizePixel = 0; track.Parent = row; Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+    
+    local fill = Instance.new("Frame"); fill.Size = UDim2.new(0, 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 180, 100); fill.BorderSizePixel = 0; fill.Parent = track; Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+    local knob = Instance.new("Frame"); knob.Size = UDim2.fromOffset(18, 18); knob.Position = UDim2.new(0, 2, 0.5, -9); knob.BackgroundColor3 = Color3.new(1,1,1); knob.Parent = track; Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
     
     local btn = Instance.new("TextButton"); btn.Size = UDim2.fromScale(1,1); btn.BackgroundTransparency = 1; btn.Text = ""; btn.Parent = row
     
     local function updateUI()
         if CFG[key] then
             TweenService:Create(fill, TweenInfo.new(0.2), {Size = UDim2.fromScale(1,1)}):Play()
-            TweenService:Create(knob, TweenInfo.new(0.2), {Position = UDim2.new(1, -18, 0.5, -8)}):Play()
+            TweenService:Create(knob, TweenInfo.new(0.2), {Position = UDim2.new(1, -20, 0.5, -9)}):Play()
         else
             TweenService:Create(fill, TweenInfo.new(0.2), {Size = UDim2.new(0, 0, 1, 0)}):Play()
-            TweenService:Create(knob, TweenInfo.new(0.2), {Position = UDim2.new(0, 2, 0.5, -8)}):Play()
+            TweenService:Create(knob, TweenInfo.new(0.2), {Position = UDim2.new(0, 2, 0.5, -9)}):Play()
         end
     end
-    
     btn.MouseButton1Click:Connect(function() CFG[key] = not CFG[key]; updateUI() end)
     updateUI()
 end
 
--- 滑动条组件
 local function addGlassSlider(name, minVal, maxVal, defaultVal, callback)
-    local row = createBaseRow(50)
-    local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, 0, 0, 20); lbl.Position = UDim2.fromOffset(12, 4)
-    lbl.BackgroundTransparency = 1; lbl.Text = name .. ": " .. defaultVal; lbl.TextColor3 = Color3.fromRGB(240,240,240); lbl.Font = Enum.Font.Gotham; lbl.TextSize = 12; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
+    local row = createGlassRow(56)
+    local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, 0, 0, 20); lbl.Position = UDim2.fromOffset(12, 6)
+    lbl.BackgroundTransparency = 1; lbl.Text = name .. ": " .. defaultVal; lbl.TextColor3 = Color3.fromRGB(240,240,240); lbl.Font = Enum.Font.GothamMedium; lbl.TextSize = 13; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
 
-    local track = Instance.new("Frame"); track.Size = UDim2.new(1, -24, 0, 6); track.Position = UDim2.new(0, 12, 1, -14)
-    track.BackgroundColor3 = Color3.fromRGB(60, 60, 80); track.BorderSizePixel = 0; track.Parent = row; Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
-    local fill = Instance.new("Frame"); fill.Size = UDim2.new((defaultVal-minVal)/(maxVal-minVal), 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 160, 90); fill.BorderSizePixel = 0; fill.Parent = track; Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-    local knob = Instance.new("Frame"); knob.Size = UDim2.fromOffset(12, 12); knob.Position = UDim2.new((defaultVal-minVal)/(maxVal-minVal), -6, 0.5, 0); knob.AnchorPoint = Vector2.new(0, 0.5); knob.BackgroundColor3 = Color3.new(1,1,1); knob.ZIndex = 2; knob.Parent = track; Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+    local track = Instance.new("Frame"); track.Size = UDim2.new(1, -24, 0, 6); track.Position = UDim2.new(0, 12, 1, -16)
+    track.BackgroundColor3 = Color3.fromRGB(50, 50, 60); track.BorderSizePixel = 0; track.Parent = row; Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+    local fill = Instance.new("Frame"); fill.Size = UDim2.new((defaultVal-minVal)/(maxVal-minVal), 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 180, 100); fill.BorderSizePixel = 0; fill.Parent = track; Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+    local knob = Instance.new("Frame"); knob.Size = UDim2.fromOffset(16, 16); knob.Position = UDim2.new((defaultVal-minVal)/(maxVal-minVal), -8, 0.5, 0); knob.AnchorPoint = Vector2.new(0, 0.5); knob.BackgroundColor3 = Color3.new(1,1,1); knob.ZIndex = 2; knob.Parent = track; Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
 
     local isDragging = false
     local function updateVal(xPos)
         local relX = math.clamp((xPos - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
         local val = math.floor(minVal + (maxVal - minVal) * relX)
-        fill.Size = UDim2.new(relX, 0, 1, 0); knob.Position = UDim2.new(relX, -6, 0.5, 0)
+        fill.Size = UDim2.new(relX, 0, 1, 0); knob.Position = UDim2.new(relX, -8, 0.5, 0)
         lbl.Text = name .. ": " .. val; callback(val)
     end
     track.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = true; updateVal(input.Position.X) end end)
@@ -144,55 +149,86 @@ local function addGlassSlider(name, minVal, maxVal, defaultVal, callback)
 end
 
 local function addSection(name)
-    local l = Instance.new("TextLabel"); l.Size = UDim2.new(1, -6, 0, 22); l.BackgroundTransparency = 1; l.Text = name
-    l.TextColor3 = Color3.fromRGB(180, 180, 200); l.Font = Enum.Font.GothamBold; l.TextSize = 12; l.TextXAlignment = Enum.TextXAlignment.Left; l.Parent = scroll
+    local l = Instance.new("TextLabel"); l.Size = UDim2.new(1, -6, 0, 24); l.BackgroundTransparency = 1; l.Text = name
+    l.TextColor3 = Color3.fromRGB(200, 200, 210); l.Font = Enum.Font.GothamBold; l.TextSize = 12; l.TextXAlignment = Enum.TextXAlignment.Left; l.Parent = scroll
 end
 
 -- ==========================================
--- 核心功能逻辑 (同 v40)
+-- 核心：真·静默瞄准 (移动端极速缓存版)
 -- ==========================================
-local function getClosestTarget()
-    local closest, minDist = nil, math.huge
-    local center = Camera.ViewportSize / 2
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LP and plr.Character then
-            local part = plr.Character:FindFirstChild(CFG.AimPart) or plr.Character:FindFirstChild("HumanoidRootPart")
-            local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-            if part and hum and hum.Health > 0 then
-                local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
-                if onScreen then
-                    local distToCenter = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
-                    if distToCenter <= CFG.FOV then
-                        local dist3D = (Camera.CFrame.Position - part.Position).Magnitude
-                        if dist3D < minDist then minDist = dist3D; closest = part end
+local cachedTarget = nil
+
+-- 后台协程：每 0.1 秒更新一次最近目标，极大降低 Hook 负担
+task.spawn(function()
+    while task.wait(0.1) do
+        if CFG.SilentAim then
+            local closest, minDist = nil, math.huge
+            local center = Camera.ViewportSize / 2
+            
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= LP and plr.Character then
+                    local part = plr.Character:FindFirstChild(CFG.AimPart) or plr.Character:FindFirstChild("HumanoidRootPart")
+                    local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+                    if part and hum and hum.Health > 0 then
+                        local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                        if onScreen then
+                            local distToCenter = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                            if distToCenter <= CFG.FOV then
+                                local dist3D = (Camera.CFrame.Position - part.Position).Magnitude
+                                if dist3D < minDist then minDist = dist3D; closest = part end
+                            end
+                        end
                     end
                 end
             end
+            cachedTarget = closest
+        else
+            cachedTarget = nil
         end
     end
-    return closest
-end
+end)
 
 local function setupSilentAim()
     if not hookmetamethod then statusBar.Text = "执行器不支持静默" return end
+    
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
-        if CFG.SilentAim and not checkcaller() and (method == "Raycast" or method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList") then
-            local target = getClosestTarget()
-            if target then
+        
+        -- 拦截射线检测
+        if CFG.SilentAim and not checkcaller() and cachedTarget then
+            if method == "Raycast" or method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" then
                 local args = {...}
-                if method == "Raycast" then args[2] = (target.Position - args[1].Origin).Unit * (args[1].Origin - target.Position).Magnitude
-                else local ray = args[1]; args[1] = Ray.new(ray.Origin, (target.Position - ray.Origin).Unit * (ray.Origin - target.Position).Magnitude) end
-                return oldNamecall(self, unpack(args))
+                -- 过滤相机碰撞：防止视角卡死
+                local isCameraRay = false
+                if method == "Raycast" then
+                    if type(args[2]) == "RaycastParams" and args[2].FilterDescendantsInstances then
+                        for _, v in ipairs(args[2].FilterDescendantsInstances) do
+                            if v == Camera then isCameraRay = true end
+                        end
+                    end
+                end
+                
+                if not isCameraRay then
+                    -- 强行把攻击射线拉向目标
+                    if method == "Raycast" then
+                        args[2] = (cachedTarget.Position - args[1].Origin).Unit * (args[1].Origin - cachedTarget.Position).Magnitude
+                    else
+                        local ray = args[1]
+                        args[1] = Ray.new(ray.Origin, (cachedTarget.Position - ray.Origin).Unit * (ray.Origin - cachedTarget.Position).Magnitude)
+                    end
+                    return oldNamecall(self, unpack(args))
+                end
             end
         end
+        
         return oldNamecall(self, ...)
     end)
-    statusBar.Text = "✔ 静默瞄准已注入"
+    statusBar.Text = "✔ 真静默已注入"
 end
 setupSilentAim()
 
+-- 防检测逻辑
 local oldIndex
 local function setupFakeSpeed()
     if not hookmetamethod then return end
@@ -267,11 +303,11 @@ addGlassToggle("血条比例透视", "ESPHealth")
 addGlassToggle("中文职业透视", "ESPRole")
 
 addSection("── 战斗辅助 ──")
-addGlassToggle("开启静默瞄准", "SilentAim")
+addGlassToggle("开启真·静默瞄准", "SilentAim")
 addGlassSlider("瞄准范围 (FOV)", 10, 500, CFG.FOV, function(val) CFG.FOV = val end)
 
 addSection("── 移动与耐力 ──")
 addGlassToggle("强制奔跑 (18)", "Speed")
 addGlassToggle("速度欺骗 (免耗耐)", "FakeSpeed")
 
-print("[Ninja Panel v41] 液态玻璃版加载完毕")
+print("[Ninja Panel v43] 真静默瞄准加载完毕")
