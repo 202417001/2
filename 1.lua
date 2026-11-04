@@ -1,5 +1,5 @@
 -- ============================================
--- Ninja Panel v53 (CanvasGroup 极限渲染 · 纯净透视)
+-- Ninja Panel v55 (底层极致光学模拟 · 纯净透视)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -22,59 +22,48 @@ local mainGui = getHiddenGui("MainPanel_" .. math.random(1000, 9999))
 local espGui = getHiddenGui("EspRender_" .. math.random(1000, 9999))
 
 -- ==========================================
--- 核心：调用 CanvasGroup 与动态物理渲染
+-- 底层光学材质主面板
 -- ==========================================
 local main = Instance.new("Frame")
 main.Size = UDim2.fromOffset(320, 360); main.Position = UDim2.fromScale(0.1, 0.2)
-main.BackgroundColor3 = Color3.fromRGB(15, 15, 20); main.BackgroundTransparency = 0.4
+-- 调整了底色，增强了吸光感，不再是个完全透明的空壳
+main.BackgroundColor3 = Color3.fromRGB(18, 20, 26); main.BackgroundTransparency = 0.15 
 main.BorderSizePixel = 0; main.Active = true; main.Draggable = true; main.Parent = mainGui
 Instance.new("UICorner", main).CornerRadius = UDim.new(0, 18)
 
--- 1. 调用 CanvasGroup (实现引擎级的局部模糊)
-local canvas = Instance.new("CanvasGroup", main)
-canvas.Size = UDim2.new(1, 0, 1, 0); canvas.BackgroundTransparency = 1
-canvas.GroupTransparency = 0; canvas.ZIndex = 2
+-- 1. 菲涅尔边缘高光 (底层硬边)
+local fStroke = Instance.new("UIStroke", main)
+fStroke.Color = Color3.new(1,1,1); fStroke.Transparency = 0.15; fStroke.Thickness = 1.5
 
--- 2. 流体波纹噪点层 (模拟真实材质的不平整)
-local noise = Instance.new("ImageLabel", main)
-noise.Size = UDim2.new(1, 0, 1, 0); noise.BackgroundTransparency = 1
--- 调用 Roblox 自带的高斯噪点图
-noise.Image = "rbxassetid://9968344227" 
-noise.ImageColor3 = Color3.fromRGB(255, 255, 255)
-noise.ImageTransparency = 0.88
-noise.ScaleType = Enum.ScaleType.Tile; noise.TileSize = UDim2.new(0, 80, 0, 80)
-noise.ZIndex = 3
-Instance.new("UICorner", noise).CornerRadius = UDim.new(0, 18)
+-- 2. 色散模拟 (底层光学错位 0.1~0.2)
+local caRed = Instance.new("UIStroke", main)
+caRed.Thickness = 1.5; caRed.Color = Color3.fromRGB(255, 60, 60); caRed.Transparency = 0.9; caRed.Offset = Vector2.new(1.2, 0)
+local caBlue = Instance.new("UIStroke", main)
+caBlue.Thickness = 1.5; caBlue.Color = Color3.fromRGB(60, 60, 255); caBlue.Transparency = 0.9; caBlue.Offset = Vector2.new(-1.2, 0)
 
--- 3. 流动的折射高光 (模拟液态波光粼粼)
+-- 3. 流体波纹与折射 (底层动态渐变)
 local fluidGrad = Instance.new("UIGradient", main)
-fluidGrad.Rotation = 120
+fluidGrad.Rotation = 45
 fluidGrad.Color = ColorSequence.new{
     ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-    ColorSequenceKeypoint.new(0.4, Color3.fromRGB(150, 180, 220)),
-    ColorSequenceKeypoint.new(0.6, Color3.fromRGB(100, 120, 160)),
+    ColorSequenceKeypoint.new(0.2, Color3.fromRGB(140, 160, 200)),
+    ColorSequenceKeypoint.new(0.5, Color3.fromRGB(80, 90, 120)),
+    ColorSequenceKeypoint.new(0.8, Color3.fromRGB(140, 160, 200)),
     ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
 }
 fluidGrad.Transparency = NumberSequence.new{
-    NumberSequenceKeypoint.new(0, 0.6),
-    NumberSequenceKeypoint.new(0.4, 0.95),
-    NumberSequenceKeypoint.new(0.8, 0.85),
-    NumberSequenceKeypoint.new(1, 0.5)
+    NumberSequenceKeypoint.new(0, 0.75),
+    NumberSequenceKeypoint.new(0.2, 0.9),
+    NumberSequenceKeypoint.new(0.5, 0.95),
+    NumberSequenceKeypoint.new(0.8, 0.9),
+    NumberSequenceKeypoint.new(1, 0.75)
 }
 
--- 4. 色散与菲涅尔边缘高光 (调用双描边制造厚度)
-local caRed = Instance.new("UIStroke", main)
-caRed.Thickness = 1.5; caRed.Color = Color3.fromRGB(255, 80, 80); caRed.Transparency = 0.85; caRed.Offset = Vector2.new(1, 1)
-local caBlue = Instance.new("UIStroke", main)
-caBlue.Thickness = 1.5; caBlue.Color = Color3.fromRGB(80, 80, 255); caBlue.Transparency = 0.85; caBlue.Offset = Vector2.new(-1, -1)
-local fStroke = Instance.new("UIStroke", main)
-fStroke.Color = Color3.new(1,1,1); fStroke.Transparency = 0.3; fStroke.Thickness = 1
-
--- 让流体波纹动起来
+-- 让流体在底层动起来
 task.spawn(function()
-    while task.wait(0.05) do
+    while task.wait(0.03) do
         if main.Visible then
-            local rot = fluidGrad.Rotation + 0.5
+            local rot = fluidGrad.Rotation + 1
             if rot > 360 then rot = 0 end
             fluidGrad.Rotation = rot
         end
@@ -83,14 +72,17 @@ end)
 
 local uiScale = Instance.new("UIScale"); uiScale.Scale = 1; uiScale.Parent = main
 
+-- 最小化图标
 local icon = Instance.new("TextButton"); icon.Size = UDim2.fromOffset(46, 46); icon.Position = UDim2.fromOffset(12, 240)
 icon.BackgroundColor3 = Color3.fromRGB(30, 30, 40); icon.Text = "N"; icon.TextColor3 = Color3.new(1, 1, 1); icon.Font = Enum.Font.GothamBold; icon.TextSize = 20
 icon.Visible = false; icon.Active = true; icon.Draggable = true; icon.Parent = mainGui; Instance.new("UICorner", icon).CornerRadius = UDim.new(1, 0)
 icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = false end)
 local function minimize() main.Visible = false; icon.Visible = true end
 
+-- 标题栏
 local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 44); title.BackgroundTransparency = 1
 title.Text = "NINJA PANEL"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main; title.ZIndex = 10
+local titleStroke = Instance.new("UIStroke", title); titleStroke.Color = Color3.new(0,0,0); titleStroke.Transparency = 0.6; titleStroke.Thickness = 2
 
 local function mkTitleBtn(text, xoff, cb)
     local b = Instance.new("TextButton"); b.Size = UDim2.fromOffset(28, 28); b.Position = UDim2.new(1, xoff, 0, 8)
@@ -107,14 +99,20 @@ scroll.CanvasSize = UDim2.new(0, 0, 0, 0); scroll.AutomaticCanvasSize = Enum.Aut
 local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 10); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
 
 -- ==========================================
--- 组件
+-- 组件 (分层渲染)
 -- ==========================================
 local function createGlassRow(parent, height)
     local row = Instance.new("Frame"); row.Size = UDim2.new(1, 0, 0, height)
-    row.BackgroundColor3 = Color3.fromRGB(30, 35, 45); row.BackgroundTransparency = 0.4
+    -- 组件的底色加深，使其不透明
+    row.BackgroundColor3 = Color3.fromRGB(30, 35, 45); row.BackgroundTransparency = 0.1
     row.BorderSizePixel = 0; row.Parent = parent; row.ZIndex = 10
     Instance.new("UICorner", row).CornerRadius = UDim.new(0, 12)
-    local s = Instance.new("UIStroke", row); s.Color = Color3.new(1,1,1); s.Transparency = 0.8
+    
+    -- 组件高光
+    local s = Instance.new("UIStroke", row); s.Color = Color3.new(1,1,1); s.Transparency = 0.7
+    -- 组件轻微色散
+    local r = Instance.new("UIStroke", row); r.Color = Color3.fromRGB(255,80,80); r.Transparency = 0.95; r.Offset = Vector2.new(1, 0)
+    local b = Instance.new("UIStroke", row); b.Color = Color3.fromRGB(80,80,255); b.Transparency = 0.95; b.Offset = Vector2.new(-1, 0)
     return row
 end
 
@@ -122,12 +120,15 @@ local function addGlassToggle(parent, name, key)
     local row = createGlassRow(parent, 46)
     local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, -70, 1, 0); lbl.Position = UDim2.fromOffset(14, 0)
     lbl.BackgroundTransparency = 1; lbl.Text = name; lbl.TextColor3 = Color3.fromRGB(255,255,255); lbl.Font = Enum.Font.GothamMedium; lbl.TextSize = 13; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row; lbl.ZIndex = 11
+    local lStroke = Instance.new("UIStroke", lbl); lStroke.Color = Color3.new(0,0,0); lStroke.Transparency = 0.5
 
     local track = Instance.new("Frame"); track.Size = UDim2.fromOffset(42, 24); track.Position = UDim2.new(1, -56, 0.5, -12)
     track.BackgroundColor3 = Color3.fromRGB(15, 15, 20); track.BorderSizePixel = 0; track.Parent = row; Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0); track.ZIndex = 11
-    
+    local tStroke = Instance.new("UIStroke", track); tStroke.Color = Color3.new(1,1,1); tStroke.Transparency = 0.6
+
     local fill = Instance.new("Frame"); fill.Size = UDim2.new(0, 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 200, 120); fill.BorderSizePixel = 0; fill.Parent = track; Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0); fill.ZIndex = 12
     local knob = Instance.new("Frame"); knob.Size = UDim2.fromOffset(20, 20); knob.Position = UDim2.new(0, 2, 0.5, -10); knob.BackgroundColor3 = Color3.new(1,1,1); knob.Parent = track; Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0); knob.ZIndex = 13
+    local kStroke = Instance.new("UIStroke", knob); kStroke.Color = Color3.new(1,1,1); kStroke.Transparency = 0.5
 
     local btn = Instance.new("TextButton"); btn.Size = UDim2.fromScale(1,1); btn.BackgroundTransparency = 1; btn.Text = ""; btn.ZIndex = 14; btn.Parent = row
     local function updateUI()
@@ -144,7 +145,7 @@ local function addGlassToggle(parent, name, key)
 end
 
 -- ==========================================
--- 透视渲染
+-- 透视渲染底层
 -- ==========================================
 local function getRoleLabel(plr)
     if plr.Team then
@@ -185,7 +186,9 @@ RunService.RenderStepped:Connect(function()
             if hrp and hum and hum.Health > 0 then
                 data.gui.Enabled = true; data.gui.Adornee = hrp
                 data.dist.Text = math.floor((Camera.CFrame.Position - hrp.Position).Magnitude) .. " studs"
-                if CFG.ESPRole then data.name.Text = "[" .. getRoleLabel(plr) .. "] " .. plr.Name else data.name.Text = plr.Name end
+                
+                if CFG.ESPRole then data.name.Text = "[" .. getRoleLabel(plr) .. "] " .. plr.Name 
+                else data.name.Text = plr.Name end
                 
                 data.barBg.Visible = CFG.ESPHealth; data.hpText.Visible = CFG.ESPHealth
                 if CFG.ESPHealth then
@@ -204,4 +207,4 @@ addGlassToggle(scroll, "玩家名字透视", "ESP")
 addGlassToggle(scroll, "血条比例透视", "ESPHealth")
 addGlassToggle(scroll, "中文职业透视", "ESPRole")
 
-print("[Ninja Panel v53] 动态物理渲染调用已加载")
+print("[Ninja Panel v55] 底层光学渲染优化加载完毕")
