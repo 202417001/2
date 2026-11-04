@@ -1,7 +1,6 @@
 -- ============================================
--- Ninja Panel v5 (完整版)
--- 功能：ESP名字/血条/角色前缀、深度扫描、手动角色、加速/高跳/Noclip
--- 全默认关闭 · 可缩放 · 可最小化图标
+-- Ninja Panel v6 (全中文 & 状态读取版)
+-- 已根据扫描结果适配圣奥里团队职业
 -- ============================================
 
 local Players           = game:GetService("Players")
@@ -34,7 +33,7 @@ gui.Parent = LP:WaitForChild("PlayerGui")
 
 -- ---------- 主窗口 ----------
 local main = Instance.new("Frame")
-main.Size = UDim2.fromOffset(320, 500)
+main.Size = UDim2.fromOffset(320, 520)
 main.Position = UDim2.fromScale(0.02, 0.2)
 main.BackgroundColor3 = Color3.fromRGB(20, 20, 24)
 main.BorderSizePixel = 0
@@ -80,7 +79,7 @@ local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 32)
 title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
 title.BorderSizePixel = 0
-title.Text = "Ninja Panel v5"
+title.Text = "Ninja 面板 v6"
 title.TextColor3 = Color3.new(1, 1, 1)
 title.Font = Enum.Font.GothamBold
 title.TextSize = 16
@@ -114,7 +113,7 @@ mkTitleBtn("▁", -32, minimize)
 
 -- ---------- 内容滚动区 ----------
 local scroll = Instance.new("ScrollingFrame")
-scroll.Size = UDim2.new(1, -12, 1, -44)
+scroll.Size = UDim2.new(1, -12, 1, -80)
 scroll.Position = UDim2.fromOffset(6, 38)
 scroll.BackgroundTransparency = 1
 scroll.BorderSizePixel = 0
@@ -127,6 +126,19 @@ local layout = Instance.new("UIListLayout")
 layout.Padding = UDim.new(0, 6)
 layout.SortOrder = Enum.SortOrder.LayoutOrder
 layout.Parent = scroll
+
+-- ---------- 底部状态栏 (显示自身饥饿/耐力) ----------
+local statusBar = Instance.new("TextLabel")
+statusBar.Size = UDim2.new(1, -12, 0, 36)
+statusBar.Position = UDim2.new(0, 6, 1, -42)
+statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+statusBar.BorderSizePixel = 0
+statusBar.Text = "正在读取状态..."
+statusBar.TextColor3 = Color3.fromRGB(0, 255, 150)
+statusBar.Font = Enum.Font.GothamBold
+statusBar.TextSize = 12
+statusBar.Parent = main
+Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
 
 -- ---------- 基础控件 ----------
 local function addButton(text, cb, color)
@@ -146,9 +158,9 @@ end
 
 local function addToggle(name, key)
     local b
-    b = addButton((CFG[key] and "[ON] " or "[OFF] ") .. name, function()
+    b = addButton((CFG[key] and "[开] " or "[关] ") .. name, function()
         CFG[key] = not CFG[key]
-        b.Text = (CFG[key] and "[ON] " or "[OFF] ") .. name
+        b.Text = (CFG[key] and "[开] " or "[关] ") .. name
         b.BackgroundColor3 = CFG[key] and Color3.fromRGB(0, 140, 80) or Color3.fromRGB(50, 50, 60)
     end)
     if CFG[key] then b.BackgroundColor3 = Color3.fromRGB(0, 140, 80) end
@@ -168,135 +180,103 @@ local function addLabel(text)
     return l
 end
 
--- ---------- 角色读取 ----------
+-- ---------- 角色读取 (圣奥里专属: Team) ----------
 local function getRoleLabel(plr)
     if ROLE_MAP[plr.Name] then return ROLE_MAP[plr.Name] end
-
-    local function check(obj)
-        if not obj then return nil end
-        for k, v in pairs(obj:GetAttributes()) do
-            local kn = k:lower()
-            if kn:find("role") or kn:find("job") or kn:find("职业") or kn:find("角色")
-               or kn:find("class") or kn:find("team") or kn:find("occ") then
-                if type(v) == "string" and v ~= "" then return v end
-            end
-        end
-        for _, tag in ipairs(CollectionService:GetTags(obj)) do
-            local t = tag:lower()
-            if t:find("role") or t:find("job") then return tag end
-        end
-        for _, c in ipairs(obj:GetChildren()) do
-            if c:IsA("StringValue") then
-                local n = c.Name:lower()
-                if n:find("role") or n:find("job") or n:find("职业") or n:find("角色")
-                   or n:find("class") or n:find("team") or n:find("occ") then
-                    if c.Value ~= "" then return c.Value end
-                end
-            end
-        end
-        return nil
-    end
-
-    local fromChar = check(plr.Character)
-    if fromChar then return fromChar end
-
+    -- 圣奥里职业直接绑在 Team 上
     if plr.Team and plr.Team.Name ~= "" and plr.Team.Name ~= "Neutral" then
         return plr.Team.Name
     end
-
-    return check(plr)
+    return nil
 end
 
--- ---------- 深度扫描（结果打在面板里） ----------
+-- ---------- 状态读取 (饥饿/耐力) ----------
+local function getStat(plr, keywords)
+    local char = plr.Character
+    -- 查 Character 属性
+    if char then
+        for k, v in pairs(char:GetAttributes()) do
+            for _, kw in ipairs(keywords) do
+                if k:lower():find(kw) then return v end
+            end
+        end
+    end
+    -- 查 Player 属性
+    for k, v in pairs(plr:GetAttributes()) do
+        for _, kw in ipairs(keywords) do
+            if k:lower():find(kw) then return v end
+        end
+    end
+    -- 查 Character 下的数值对象
+    if char then
+        for _, c in ipairs(char:GetDescendants()) do
+            if c:IsA("NumberValue") or c:IsA("IntValue") then
+                for _, kw in ipairs(keywords) do
+                    if c.Name:lower():find(kw) then return c.Value end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function updateStats()
+    local hunger = getStat(LP, {"hunger", "food", "饥饿"}) or "未知"
+    local stamina = getStat(LP, {"stamina", "energy", "耐力", "体力"}) or "未知"
+
+    if type(hunger) == "number" then hunger = math.floor(hunger) .. "%" end
+    if type(stamina) == "number" then stamina = math.floor(stamina) .. "%" end
+
+    statusBar.Text = "🍗 饥饿: " .. tostring(hunger) .. "  |  ⚡ 耐力: " .. tostring(stamina)
+end
+
+-- ---------- 深度扫描 ----------
 local function scanRoles()
     local L = {}
     local function w(s) table.insert(L, tostring(s)) end
 
     w("===== 深度角色扫描 =====")
-
-    local services = { "ReplicatedStorage", "Workspace", "Teams" }
-    for _, sn in ipairs(services) do
-        local ok, svc = pcall(function() return game:GetService(sn) end)
-        if ok and svc then
-            local found = {}
-            local ok2, desc = pcall(function() return svc:GetDescendants() end)
-            if ok2 then
-                for _, d in ipairs(desc) do
-                    if d:IsA("StringValue") then
-                        local n = d.Name:lower()
-                        if n:find("role") or n:find("job") or n:find("职业") or n:find("角色") then
-                            table.insert(found, d:GetFullName() .. " = " .. tostring(d.Value))
-                            if #found >= 30 then break end
-                        end
-                    end
-                end
-            end
-            if #found > 0 then
-                w("--- [" .. sn .. "] 可疑 StringValue " .. #found .. " 个 ---")
-                for _, line in ipairs(found) do w("  " .. line) end
-            end
-        end
-    end
-
     w("--- Teams ---")
     local okT, Teams = pcall(function() return game:GetService("Teams") end)
     if okT and Teams then
         for _, t in ipairs(Teams:GetTeams()) do
-            w("  [Team] " .. t.Name .. " / Color=" .. tostring(t.TeamColor))
+            w("  [Team] " .. t.Name)
         end
     end
 
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LP then
-            w("========== " .. p.Name .. " (" .. p.DisplayName .. ") ==========")
+            w("========== " .. p.Name .. " ==========")
             w("  Team = " .. tostring(p.Team and p.Team.Name))
-            w("  Neutral = " .. tostring(p.Neutral))
             for k, v in pairs(p:GetAttributes()) do
-                w("  [Player Attr] " .. k .. " = " .. tostring(v))
+                w("  [Attr] " .. k .. " = " .. tostring(v))
             end
-            for _, tag in ipairs(CollectionService:GetTags(p)) do
-                w("  [Player Tag] " .. tag)
-            end
-
             local char = p.Character
             if char then
                 local function walk(node, depth, prefix)
-                    if depth > 4 then return end
+                    if depth > 3 then return end
                     for _, c in ipairs(node:GetChildren()) do
                         local full = prefix .. c.Name
                         if c:IsA("StringValue") then
                             w("  " .. full .. " = " .. tostring(c.Value))
-                        elseif c:IsA("TextLabel") and c.Text ~= "" then
-                            w("  " .. full .. " [text] = " .. tostring(c.Text))
-                        elseif c:IsA("IntValue") or c:IsA("NumberValue") or c:IsA("BoolValue") then
+                        elseif c:IsA("IntValue") or c:IsA("NumberValue") then
                             w("  " .. full .. " = " .. tostring(c.Value))
                         end
                         walk(c, depth + 1, full .. ".")
                     end
                 end
                 walk(char, 1, "")
-                for k, v in pairs(char:GetAttributes()) do
-                    w("  [Char Attr] " .. k .. " = " .. tostring(v))
-                end
-                for _, tag in ipairs(CollectionService:GetTags(char)) do
-                    w("  [Char Tag] " .. tag)
-                end
-            else
-                w("  (无角色)")
             end
         end
     end
     w("===== 扫描结束 =====")
 
-    print(table.concat(L, "\n"))
-
-    -- 弹出结果窗口
     local oldWin = gui:FindFirstChild("ScanWindow")
     if oldWin then oldWin:Destroy() end
 
     local win = Instance.new("Frame")
     win.Name = "ScanWindow"
-    win.Size = UDim2.fromOffset(360, 320)
+    win.Size = UDim2.fromOffset(340, 300)
     win.Position = UDim2.fromScale(0.5, 0.5)
     win.AnchorPoint = Vector2.new(0.5, 0.5)
     win.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
@@ -313,7 +293,6 @@ local function scanRoles()
     wtitle.Text = "扫描结果"
     wtitle.TextColor3 = Color3.new(1, 1, 1)
     wtitle.Font = Enum.Font.GothamBold
-    wtitle.TextSize = 14
     wtitle.Parent = win
     Instance.new("UICorner", wtitle).CornerRadius = UDim.new(0, 8)
 
@@ -323,8 +302,6 @@ local function scanRoles()
     wclose.BackgroundColor3 = Color3.fromRGB(120, 40, 40)
     wclose.Text = "×"
     wclose.TextColor3 = Color3.new(1, 1, 1)
-    wclose.Font = Enum.Font.GothamBold
-    wclose.TextSize = 14
     wclose.Parent = win
     Instance.new("UICorner", wclose).CornerRadius = UDim.new(0, 6)
     wclose.MouseButton1Click:Connect(function() win:Destroy() end)
@@ -333,7 +310,6 @@ local function scanRoles()
     wscroll.Size = UDim2.new(1, -12, 1, -40)
     wscroll.Position = UDim2.fromOffset(6, 34)
     wscroll.BackgroundTransparency = 1
-    wscroll.BorderSizePixel = 0
     wscroll.ScrollBarThickness = 4
     wscroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     wscroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
@@ -377,7 +353,6 @@ local function openRoleInput()
     lbl.Text = "格式：玩家名=角色"
     lbl.TextColor3 = Color3.fromRGB(180, 180, 200)
     lbl.Font = Enum.Font.Gotham
-    lbl.TextSize = 12
     lbl.TextXAlignment = Enum.TextXAlignment.Left
     lbl.Parent = box
 
@@ -387,11 +362,9 @@ local function openRoleInput()
     input.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
     input.BorderSizePixel = 0
     input.TextColor3 = Color3.new(1, 1, 1)
-    input.PlaceholderText = "如 Bob=Policeman"
+    input.PlaceholderText = "如 Bob=Police"
     input.Text = ""
     input.ClearTextOnFocus = false
-    input.Font = Enum.Font.Gotham
-    input.TextSize = 13
     input.Parent = box
     Instance.new("UICorner", input).CornerRadius = UDim.new(0, 6)
 
@@ -399,11 +372,8 @@ local function openRoleInput()
     ok.Size = UDim2.fromOffset(120, 28)
     ok.Position = UDim2.new(0.5, -125, 1, -34)
     ok.BackgroundColor3 = Color3.fromRGB(0, 130, 80)
-    ok.BorderSizePixel = 0
     ok.Text = "确认"
     ok.TextColor3 = Color3.new(1, 1, 1)
-    ok.Font = Enum.Font.GothamBold
-    ok.TextSize = 13
     ok.Parent = box
     Instance.new("UICorner", ok).CornerRadius = UDim.new(0, 6)
 
@@ -411,11 +381,8 @@ local function openRoleInput()
     cancel.Size = UDim2.fromOffset(120, 28)
     cancel.Position = UDim2.new(0.5, 5, 1, -34)
     cancel.BackgroundColor3 = Color3.fromRGB(90, 45, 45)
-    cancel.BorderSizePixel = 0
     cancel.Text = "取消"
     cancel.TextColor3 = Color3.new(1, 1, 1)
-    cancel.Font = Enum.Font.GothamBold
-    cancel.TextSize = 13
     cancel.Parent = box
     Instance.new("UICorner", cancel).CornerRadius = UDim.new(0, 6)
 
@@ -423,7 +390,6 @@ local function openRoleInput()
         local name, role = input.Text:match("^(.-)%s*=%s*(.*)$")
         if name and role and name ~= "" and role ~= "" then
             ROLE_MAP[name] = role
-            print("[Role] " .. name .. " = " .. role)
         end
         box:Destroy()
     end)
@@ -447,7 +413,6 @@ local function buildESP(plr)
     nm.BackgroundTransparency = 1
     nm.TextColor3 = Color3.new(1, 1, 1)
     nm.TextStrokeTransparency = 0
-    nm.TextSize = 12
     nm.Font = Enum.Font.GothamBold
     nm.Text = plr.Name
     nm.Parent = g
@@ -515,8 +480,11 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- ---------- 状态循环 ----------
+-- ---------- 主循环 (自身状态/加速/穿墙) ----------
 RunService.Heartbeat:Connect(function()
+    -- 状态读取
+    updateStats()
+
     local char = LP.Character
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
@@ -532,24 +500,22 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
--- ---------- 面板按钮（按顺序） ----------
-addLabel("── ESP ──")
-addToggle("ESP 玩家名字", "ESP")
-addToggle("ESP 血条", "ESPHealth")
-addToggle("ESP 角色前缀", "ESPRole")
+-- ---------- UI 按钮构建 ----------
+addLabel("── 透视功能 ──")
+addToggle("透视 玩家名字", "ESP")
+addToggle("透视 血条", "ESPHealth")
+addToggle("透视 角色前缀", "ESPRole")
 
-addLabel("── 角色 ──")
-addButton("深度扫描角色", scanRoles, Color3.fromRGB(120, 80, 160))
-addButton("手动设置角色", openRoleInput, Color3.fromRGB(80, 120, 80))
-
-addLabel("── 角色操作 ──")
+addLabel("── 角色工具 ──")
+addButton("扫描角色属性", scanRoles, Color3.fromRGB(120, 80, 160))
+addButton("手动设置身份", openRoleInput, Color3.fromRGB(80, 120, 80))
 addButton("刷新角色", function()
     if LP.Character then LP.Character:BreakJoints() end
 end)
 
-addLabel("── 自身 ──")
-addToggle("加速", "Speed")
+addLabel("── 自身修改 ──")
+addToggle("移动加速", "Speed")
 addToggle("高跳", "Jump")
-addToggle("穿墙 Noclip", "Noclip")
+addToggle("穿墙 (Noclip)", "Noclip")
 
-print("[Ninja Panel v5] loaded")
+print("[Ninja Panel v6] 已加载")
