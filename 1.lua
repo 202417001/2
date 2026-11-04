@@ -1,5 +1,5 @@
 -- ============================================
--- Ninja Panel v26 (终极版 · 锁定 PlayerEvent)
+-- Ninja Panel v27 (暴力提取版 · 锁定数字)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -32,7 +32,7 @@ icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = fa
 local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v26 (终极拦截)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
+title.BorderSizePixel = 0; title.Text = "Ninja v27 (暴力提取)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
 local function mkTitleBtn(text, xoff, cb)
@@ -51,7 +51,7 @@ scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main
 local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
 
 local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 36); statusBar.Position = UDim2.new(0, 6, 1, -42)
-statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "等待开启状态抓取"
+statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "等待开启抓取"
 statusBar.TextColor3 = Color3.fromRGB(0, 255, 150); statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12
 statusBar.Parent = main; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
 
@@ -78,48 +78,61 @@ local function getRoleLabel(plr)
 end
 
 -- ==========================================
--- 核心：监听 PlayerEvent 并提取数值
+-- 核心：暴力遍历参数抓取
 -- ==========================================
-local currentStamina = "未知"
-local currentHunger = "未知"
-local eventCount = 0
+local currentStats = {} -- 用来存放所有抓到的值
+local hooked = false
 
 local function startStateHook()
-    if not hookmetamethod then statusBar.Text = "执行器不支持 Hook" return end
+    if not hookmetamethod then statusBar.Text = "不支持 Hook" return end
+    if hooked then statusBar.Text = "已经在抓取了" return end
     
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
         
-        -- 只抓 PlayerEvent 的网络包
-        if not checkcaller() and (method == "FireServer" or method == "InvokeServer") and self.Name == "PlayerEvent" then
+        -- 抓取所有向服务器发包的事件（重点盯防 PlayerEvent）
+        if not checkcaller() and (method == "FireServer" or method == "InvokeServer") then
             local args = {...}
-            -- 我们截图里看到，耐力是从 48, 47 往下掉的
-            if type(args[1]) == "number" and args[1] >= 0 and args[1] <= 100 then
-                currentStamina = tostring(math.floor(args[1]))
-                eventCount = eventCount + 1
-            end
-            -- 如果游戏饥饿值也在发，可能是 args[2] 等
-            if type(args[2]) == "number" and args[2] >= 0 and args[2] <= 100 then
-                currentHunger = tostring(math.floor(args[2]))
+            -- 暴力遍历参数，不管它在第几个位置
+            for i, v in ipairs(args) do
+                if type(v) == "number" and v >= 0 and v <= 100 then
+                    -- 排除坐标轴和极小值
+                    if not (v < 1 and v > 0) then
+                        -- 把抓到的数值放进表里，键名用事件名+参数位置
+                        local key = self.Name .. " (" .. tostring(i) .. ")"
+                        currentStats[key] = math.floor(v)
+                    end
+                end
             end
         end
         
         return oldNamecall(self, ...)
     end)
-    statusBar.Text = "✔ 监听已开启"
+    hooked = true
+    statusBar.Text = "✔ 暴力抓取已开启，去跑步"
 end
 
--- 实时刷新底部文本
+-- 刷新底部状态栏，把所有抓到的变量显示出来
 task.spawn(function()
     while task.wait(0.5) do
-        if eventCount > 0 then
-            statusBar.Text = "🍗 饥饿: " .. currentHunger .. "  |  ⚡ 耐力: " .. currentStamina
+        if hooked then
+            local txt = {}
+            for k, v in pairs(currentStats) do
+                -- 只显示最近在变动的，最多显示 3 个防止太长
+                table.insert(txt, k .. ":" .. tostring(v))
+                if #txt >= 3 then break end
+            end
+            if #txt > 0 then
+                statusBar.Text = table.concat(txt, " | ")
+            else
+                statusBar.Text = "正在抓取...请去跑步消耗"
+            end
         end
     end
 end)
 
--- ---------- 原生 BillboardGui ESP (极短血条) ----------
+-- ---------- 原生 BillboardGui ESP ----------
 local espData = {}
 local function buildESP(plr)
     if plr == LP then return end; if espData[plr] then return end
@@ -160,6 +173,6 @@ addToggle("透视 玩家名字", "ESP")
 addToggle("透视 血条比例", "ESPHealth")
 addToggle("透视 中文职业", "ESPRole")
 
-addButton("开启状态网络抓取", startStateHook, Color3.fromRGB(50, 150, 200))
+addButton("开启暴力提取", startStateHook, Color3.fromRGB(50, 150, 200))
 
-print("[Ninja Panel v26] 终极版已加载")
+print("[Ninja Panel v27] 已加载")
