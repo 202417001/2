@@ -1,9 +1,11 @@
 -- ============================================
--- Ninja Panel v38 (全图搜刮打击 · 强制读取)
+-- Ninja Panel v41 (液态玻璃 · 自动排版UI)
 -- ============================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
@@ -11,8 +13,7 @@ local CFG = {
     ESP = false, ESPHealth = false, ESPRole = false,
     Speed = false, SpeedVal = 18, 
     FakeSpeed = false,
-    Aura = false, AuraRange = 30,
-    Scale = 1.0,
+    SilentAim = false, AimPart = "Head", FOV = 150,
 }
 local CN_ROLE_MAP = { ["Chef"]="厨师",["Civilian"]="平民",["Delivery"]="快递员",["Farmer"]="农夫",["Fire"]="消防员",["Medical"]="医生",["Police"]="警察",["Prisoner"]="囚犯",["Road Service"]="路政",["Transit"]="公交司机" }
 
@@ -26,153 +27,178 @@ end
 local mainGui = getHiddenGui("MainPanel_" .. math.random(1000, 9999))
 local espGui = getHiddenGui("EspRender_" .. math.random(1000, 9999))
 
-local main = Instance.new("Frame"); main.Size = UDim2.fromOffset(300, 480); main.Position = UDim2.fromScale(0.02, 0.2)
-main.BackgroundColor3 = Color3.fromRGB(20, 20, 24); main.BorderSizePixel = 0; main.Active = true; main.Draggable = true; main.Parent = mainGui
-Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
+-- ==========================================
+-- 液态玻璃主面板
+-- ==========================================
+local main = Instance.new("Frame")
+main.Size = UDim2.fromOffset(320, 480); main.Position = UDim2.fromScale(0.1, 0.2)
+main.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+main.BackgroundTransparency = 0.2 -- 玻璃透明感
+main.BorderSizePixel = 0; main.Active = true; main.Draggable = true; main.Parent = mainGui
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 12)
+
+-- 玻璃高光边框
+local stroke = Instance.new("UIStroke", main)
+stroke.Color = Color3.fromRGB(255, 255, 255)
+stroke.Transparency = 0.7
+stroke.Thickness = 1
+
 local uiScale = Instance.new("UIScale"); uiScale.Scale = 1; uiScale.Parent = main
 
+-- 最小化图标
 local icon = Instance.new("TextButton"); icon.Size = UDim2.fromOffset(46, 46); icon.Position = UDim2.fromOffset(12, 240)
-icon.BackgroundColor3 = Color3.fromRGB(40, 40, 52); icon.Text = "N"; icon.TextColor3 = Color3.new(1, 1, 1); icon.Font = Enum.Font.GothamBold; icon.TextSize = 20
+icon.BackgroundColor3 = Color3.fromRGB(30, 30, 40); icon.Text = "N"; icon.TextColor3 = Color3.new(1, 1, 1); icon.Font = Enum.Font.GothamBold; icon.TextSize = 20
 icon.Visible = false; icon.Active = true; icon.Draggable = true; icon.Parent = mainGui; Instance.new("UICorner", icon).CornerRadius = UDim.new(1, 0)
 icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = false end)
 local function minimize() main.Visible = false; icon.Visible = true end
 
-local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v38 (全图打击)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
-Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
+-- 标题栏
+local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 36); title.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+title.BackgroundTransparency = 0.5; title.BorderSizePixel = 0; title.Text = "Ninja v41 Glass"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 15; title.Parent = main
+Instance.new("UICorner", title).CornerRadius = UDim.new(0, 12)
 
 local function mkTitleBtn(text, xoff, cb)
-    local b = Instance.new("TextButton"); b.Size = UDim2.fromOffset(28, 28); b.Position = UDim2.new(1, xoff, 0, 2)
-    b.BackgroundColor3 = Color3.fromRGB(60, 60, 75); b.BorderSizePixel = 0; b.Text = text; b.TextColor3 = Color3.new(1, 1, 1)
-    b.Font = Enum.Font.GothamBold; b.TextSize = 14; b.Parent = main; Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+    local b = Instance.new("TextButton"); b.Size = UDim2.fromOffset(28, 28); b.Position = UDim2.new(1, xoff, 0, 4)
+    b.BackgroundTransparency = 1; b.Text = text; b.TextColor3 = Color3.fromRGB(200, 200, 200)
+    b.Font = Enum.Font.GothamBold; b.TextSize = 18; b.Parent = main
     b.MouseButton1Click:Connect(cb); return b
 end
 mkTitleBtn("−", -94, function() uiScale.Scale = math.max(0.6, uiScale.Scale - 0.1) end)
 mkTitleBtn("+", -64, function() uiScale.Scale = math.min(1.8, uiScale.Scale + 0.1) end)
-mkTitleBtn("▁", -32, minimize)
+mkTitleBtn("×", -32, minimize)
 
-local scroll = Instance.new("ScrollingFrame"); scroll.Size = UDim2.new(1, -12, 1, -80); scroll.Position = UDim2.fromOffset(6, 38)
-scroll.BackgroundTransparency = 1; scroll.BorderSizePixel = 0; scroll.ScrollBarThickness = 4; scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main
-local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
+local scroll = Instance.new("ScrollingFrame"); scroll.Size = UDim2.new(1, -12, 1, -100); scroll.Position = UDim2.fromOffset(6, 44)
+scroll.BackgroundTransparency = 1; scroll.BorderSizePixel = 0; scroll.ScrollBarThickness = 2; scroll.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
+scroll.CanvasSize = UDim2.new(0, 0, 0, 0); scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main
+local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 8); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
+local padding = Instance.new("UIPadding", scroll); padding.PaddingLeft = UDim.new(0, 4); padding.PaddingRight = UDim.new(0, 4); padding.PaddingTop = UDim.new(0, 4)
 
 local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 36); statusBar.Position = UDim2.new(0, 6, 1, -42)
-statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "点击 1 扫荡网络包"
+statusBar.BackgroundColor3 = Color3.fromRGB(20, 20, 30); statusBar.BackgroundTransparency = 0.3; statusBar.BorderSizePixel = 0; statusBar.Text = "静默待命"
 statusBar.TextColor3 = Color3.fromRGB(0, 255, 150); statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12
-statusBar.Parent = main; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
-
-local function addButton(text, cb, color)
-    local b = Instance.new("TextButton"); b.Size = UDim2.new(1, -6, 0, 34); b.BackgroundColor3 = color or Color3.fromRGB(50, 50, 60)
-    b.BorderSizePixel = 0; b.Text = text; b.TextColor3 = Color3.new(1, 1, 1); b.Font = Enum.Font.Gotham; b.TextSize = 14; b.Parent = scroll
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6); b.MouseButton1Click:Connect(cb); return b
-end
-
-local function addToggle(name, key)
-    local b; b = addButton((CFG[key] and "[开] " or "[关] ") .. name, function()
-        CFG[key] = not CFG[key]; b.Text = (CFG[key] and "[开] " or "[关] ") .. name
-        b.BackgroundColor3 = CFG[key] and Color3.fromRGB(0, 140, 80) or Color3.fromRGB(50, 50, 60)
-    end)
-    if CFG[key] then b.BackgroundColor3 = Color3.fromRGB(0, 140, 80) end; return b
-end
+statusBar.Parent = main; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 8)
 
 -- ==========================================
--- 核心：全图搜刮网络包
+-- 玻璃 UI 组件生成器
 -- ==========================================
-local attackRemotes = {}
-local logList = {}
+local function createBaseRow(height)
+    local row = Instance.new("Frame")
+    row.Size = UDim2.new(1, 0, 0, height)
+    row.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+    row.BackgroundTransparency = 0.3
+    row.BorderSizePixel = 0
+    row.Parent = scroll
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 8)
+    local s = Instance.new("UIStroke", row); s.Color = Color3.new(1,1,1); s.Transparency = 0.85
+    return row
+end
 
-local function scanAllRemotes()
-    attackRemotes = {}
-    table.clear(logList)
+-- 开关组件（右侧）
+local function addGlassToggle(name, key)
+    local row = createBaseRow(40)
+    local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, -60, 1, 0); lbl.Position = UDim2.fromOffset(12, 0)
+    lbl.BackgroundTransparency = 1; lbl.Text = name; lbl.TextColor3 = Color3.fromRGB(240,240,240); lbl.Font = Enum.Font.Gotham; lbl.TextSize = 13; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
+
+    local track = Instance.new("Frame"); track.Size = UDim2.fromOffset(36, 20); track.Position = UDim2.new(1, -48, 0.5, -10)
+    track.BackgroundColor3 = Color3.fromRGB(60, 60, 80); track.BorderSizePixel = 0; track.Parent = row; Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+    local fill = Instance.new("Frame"); fill.Size = UDim2.new(0, 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 160, 90); fill.BorderSizePixel = 0; fill.Parent = track; Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+    local knob = Instance.new("Frame"); knob.Size = UDim2.fromOffset(16, 16); knob.Position = UDim2.new(0, 2, 0.5, -8); knob.BackgroundColor3 = Color3.new(1,1,1); knob.Parent = track; Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
     
-    -- 1. 搜 ReplicatedStorage
-    local rs = game:GetService("ReplicatedStorage")
-    for _, obj in ipairs(rs:GetDescendants()) do
-        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-            local n = obj.Name:lower()
-            if n:find("hit") or n:find("attack") or n:find("damage") or n:find("combat") or n:find("sword") or n:find("gun") or n:find("shoot") then
-                table.insert(attackRemotes, obj)
-                table.insert(logList, "[发] " .. obj:GetFullName())
-            end
+    local btn = Instance.new("TextButton"); btn.Size = UDim2.fromScale(1,1); btn.BackgroundTransparency = 1; btn.Text = ""; btn.Parent = row
+    
+    local function updateUI()
+        if CFG[key] then
+            TweenService:Create(fill, TweenInfo.new(0.2), {Size = UDim2.fromScale(1,1)}):Play()
+            TweenService:Create(knob, TweenInfo.new(0.2), {Position = UDim2.new(1, -18, 0.5, -8)}):Play()
+        else
+            TweenService:Create(fill, TweenInfo.new(0.2), {Size = UDim2.new(0, 0, 1, 0)}):Play()
+            TweenService:Create(knob, TweenInfo.new(0.2), {Position = UDim2.new(0, 2, 0.5, -8)}):Play()
         end
     end
     
-    -- 2. 搜 Character (有些放在本地)
-    local char = LP.Character
-    if char then
-        for _, obj in ipairs(char:GetDescendants()) do
-            if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) and not table.find(attackRemotes, obj) then
-                table.insert(attackRemotes, obj)
-                table.insert(logList, "[身] " .. obj:GetFullName())
-            end
-        end
-    end
-
-    if #attackRemotes > 0 then
-        statusBar.Text = "✔ 找到了 " .. #attackRemotes .. " 个攻击包"
-    else
-        statusBar.Text = "没找到，尝试直接用全服发包"
-    end
-    
-    -- 弹窗显示找到了什么
-    local oldWin = mainGui:FindFirstChild("ScanWin"); if oldWin then oldWin:Destroy() end
-    local win = Instance.new("Frame"); win.Size = UDim2.fromOffset(320, 240); win.Position = UDim2.fromScale(0.5, 0.5); win.AnchorPoint = Vector2.new(0.5, 0.5)
-    win.BackgroundColor3 = Color3.fromRGB(15, 15, 20); win.Parent = mainGui; Instance.new("UICorner", win).CornerRadius = UDim.new(0, 8)
-    
-    local wtitle = Instance.new("TextLabel"); wtitle.Size = UDim2.new(1, 0, 0, 30); wtitle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-    wtitle.Text = "扫到的攻击包"; wtitle.TextColor3 = Color3.new(1, 1, 1); wtitle.Parent = win
-    local wclose = Instance.new("TextButton"); wclose.Size = UDim2.fromOffset(28, 28); wclose.Position = UDim2.new(1, -30, 0, 1)
-    wclose.BackgroundColor3 = Color3.fromRGB(120, 40, 40); wclose.Text = "×"; wclose.TextColor3 = Color3.new(1, 1, 1); wclose.Parent = win
-    wclose.MouseButton1Click:Connect(function() win:Destroy() end)
-    
-    local wtxt = Instance.new("TextLabel"); wtxt.Size = UDim2.new(1, -10, 1, -40); wtxt.Position = UDim2.fromOffset(5, 35)
-    wtxt.BackgroundTransparency = 1; wtxt.Text = table.concat(logList, "\n"); wtxt.TextColor3 = Color3.new(1, 1, 1)
-    wtxt.Font = Enum.Font.Code; wtxt.TextSize = 11; wtxt.TextXAlignment = Enum.TextXAlignment.Left; wtxt.TextYAlignment = Enum.TextYAlignment.Top
-    wtxt.TextWrapped = true; wtxt.Parent = win
+    btn.MouseButton1Click:Connect(function() CFG[key] = not CFG[key]; updateUI() end)
+    updateUI()
 end
 
--- 自动发射器
-task.spawn(function()
-    while task.wait(0.1) do
-        if CFG.Aura then
-            local myChar = LP.Character
-            if not myChar then continue end
-            local myHRP = myChar:FindFirstChild("HumanoidRootPart")
-            
-            -- 如果连一个包都没扫到，直接发送 "Hit" 字符串和位置给常见的包
-            if myHRP then
-                for _, plr in ipairs(Players:GetPlayers()) do
-                    if plr ~= LP and plr.Character then
-                        local tgtHRP = plr.Character:FindFirstChild("HumanoidRootPart")
-                        local tgtHum = plr.Character:FindFirstChildOfClass("Humanoid")
-                        if tgtHRP and tgtHum and tgtHum.Health > 0 then
-                            if (myHRP.Position - tgtHRP.Position).Magnitude <= CFG.AuraRange then
-                                for _, remote in ipairs(attackRemotes) do
-                                    if remote:IsA("RemoteEvent") then
-                                        pcall(function() remote:FireServer(tgtHum) end)
-                                        pcall(function() remote:FireServer(plr.Character) end)
-                                        pcall(function() remote:FireServer(tgtHRP.Position) end)
-                                        pcall(function() remote:FireServer("hit", tgtHRP.Position) end)
-                                    end
-                                end
-                            end
-                        end
+-- 滑动条组件
+local function addGlassSlider(name, minVal, maxVal, defaultVal, callback)
+    local row = createBaseRow(50)
+    local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, 0, 0, 20); lbl.Position = UDim2.fromOffset(12, 4)
+    lbl.BackgroundTransparency = 1; lbl.Text = name .. ": " .. defaultVal; lbl.TextColor3 = Color3.fromRGB(240,240,240); lbl.Font = Enum.Font.Gotham; lbl.TextSize = 12; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
+
+    local track = Instance.new("Frame"); track.Size = UDim2.new(1, -24, 0, 6); track.Position = UDim2.new(0, 12, 1, -14)
+    track.BackgroundColor3 = Color3.fromRGB(60, 60, 80); track.BorderSizePixel = 0; track.Parent = row; Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+    local fill = Instance.new("Frame"); fill.Size = UDim2.new((defaultVal-minVal)/(maxVal-minVal), 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 160, 90); fill.BorderSizePixel = 0; fill.Parent = track; Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+    local knob = Instance.new("Frame"); knob.Size = UDim2.fromOffset(12, 12); knob.Position = UDim2.new((defaultVal-minVal)/(maxVal-minVal), -6, 0.5, 0); knob.AnchorPoint = Vector2.new(0, 0.5); knob.BackgroundColor3 = Color3.new(1,1,1); knob.ZIndex = 2; knob.Parent = track; Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+    local isDragging = false
+    local function updateVal(xPos)
+        local relX = math.clamp((xPos - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+        local val = math.floor(minVal + (maxVal - minVal) * relX)
+        fill.Size = UDim2.new(relX, 0, 1, 0); knob.Position = UDim2.new(relX, -6, 0.5, 0)
+        lbl.Text = name .. ": " .. val; callback(val)
+    end
+    track.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = true; updateVal(input.Position.X) end end)
+    UIS.InputChanged:Connect(function(input) if isDragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then updateVal(input.Position.X) end end)
+    UIS.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = false end end)
+end
+
+local function addSection(name)
+    local l = Instance.new("TextLabel"); l.Size = UDim2.new(1, -6, 0, 22); l.BackgroundTransparency = 1; l.Text = name
+    l.TextColor3 = Color3.fromRGB(180, 180, 200); l.Font = Enum.Font.GothamBold; l.TextSize = 12; l.TextXAlignment = Enum.TextXAlignment.Left; l.Parent = scroll
+end
+
+-- ==========================================
+-- 核心功能逻辑 (同 v40)
+-- ==========================================
+local function getClosestTarget()
+    local closest, minDist = nil, math.huge
+    local center = Camera.ViewportSize / 2
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LP and plr.Character then
+            local part = plr.Character:FindFirstChild(CFG.AimPart) or plr.Character:FindFirstChild("HumanoidRootPart")
+            local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+            if part and hum and hum.Health > 0 then
+                local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                if onScreen then
+                    local distToCenter = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                    if distToCenter <= CFG.FOV then
+                        local dist3D = (Camera.CFrame.Position - part.Position).Magnitude
+                        if dist3D < minDist then minDist = dist3D; closest = part end
                     end
                 end
             end
         end
     end
-end)
+    return closest
+end
 
--- 速度与防检测逻辑
+local function setupSilentAim()
+    if not hookmetamethod then statusBar.Text = "执行器不支持静默" return end
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        if CFG.SilentAim and not checkcaller() and (method == "Raycast" or method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList") then
+            local target = getClosestTarget()
+            if target then
+                local args = {...}
+                if method == "Raycast" then args[2] = (target.Position - args[1].Origin).Unit * (args[1].Origin - target.Position).Magnitude
+                else local ray = args[1]; args[1] = Ray.new(ray.Origin, (target.Position - ray.Origin).Unit * (ray.Origin - target.Position).Magnitude) end
+                return oldNamecall(self, unpack(args))
+            end
+        end
+        return oldNamecall(self, ...)
+    end)
+    statusBar.Text = "✔ 静默瞄准已注入"
+end
+setupSilentAim()
+
 local oldIndex
 local function setupFakeSpeed()
     if not hookmetamethod then return end
     pcall(function()
         oldIndex = hookmetamethod(game, "__index", function(t, k)
-            if CFG.FakeSpeed and not checkcaller() then
-                if k == "WalkSpeed" and t:IsA("Humanoid") then return 16 end
-            end
+            if CFG.FakeSpeed and not checkcaller() and k == "WalkSpeed" and t:IsA("Humanoid") then return 16 end
             return oldIndex(t, k)
         end)
     end)
@@ -180,14 +206,14 @@ end
 setupFakeSpeed()
 
 RunService.Heartbeat:Connect(function()
-    local char = LP.Character
-    if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
+    local char = LP.Character; if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid"); if not hum then return end
     if CFG.Speed then hum.WalkSpeed = CFG.SpeedVal end
 end)
 
--- ESP
+-- ==========================================
+-- ESP 渲染
+-- ==========================================
 local function getRoleLabel(plr)
     if plr.Team then
         local tName = plr.Team.Name
@@ -232,28 +258,20 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- UI 按钮
-addToggle("透视 玩家名字", "ESP")
-addToggle("透视 血条比例", "ESPHealth")
-addToggle("透视 中文职业", "ESPRole")
+-- ==========================================
+-- 生成 UI
+-- ==========================================
+addSection("── 视觉透视 ──")
+addGlassToggle("玩家名字透视", "ESP")
+addGlassToggle("血条比例透视", "ESPHealth")
+addGlassToggle("中文职业透视", "ESPRole")
 
-local lbl1 = Instance.new("TextLabel"); lbl1.Size = UDim2.new(1, -6, 0, 22); lbl1.BackgroundTransparency = 1; lbl1.Text = "── 全图网络打击 ──"
-lbl1.TextColor3 = Color3.fromRGB(160, 160, 180); lbl1.Font = Enum.Font.GothamBold; lbl1.TextSize = 13; lbl1.TextXAlignment = Enum.TextXAlignment.Left; lbl1.Parent = scroll
+addSection("── 战斗辅助 ──")
+addGlassToggle("开启静默瞄准", "SilentAim")
+addGlassSlider("瞄准范围 (FOV)", 10, 500, CFG.FOV, function(val) CFG.FOV = val end)
 
-addButton("1. 全图扫荡攻击包", scanAllRemotes, Color3.fromRGB(50, 150, 200))
-addToggle("2. 开启疯狂轰炸", "Aura")
+addSection("── 移动与耐力 ──")
+addGlassToggle("强制奔跑 (18)", "Speed")
+addGlassToggle("速度欺骗 (免耗耐)", "FakeSpeed")
 
-local rangeBtn
-rangeBtn = addButton("打击范围: " .. CFG.AuraRange .. " 米", function()
-    CFG.AuraRange = CFG.AuraRange + 10
-    if CFG.AuraRange > 100 then CFG.AuraRange = 10 end
-    rangeBtn.Text = "打击范围: " .. CFG.AuraRange .. " 米"
-end, Color3.fromRGB(120, 80, 80))
-
-local lbl2 = Instance.new("TextLabel"); lbl2.Size = UDim2.new(1, -6, 0, 22); lbl2.BackgroundTransparency = 1; lbl2.Text = "── 速度突破 ──"
-lbl2.TextColor3 = Color3.fromRGB(160, 160, 180); lbl2.Font = Enum.Font.GothamBold; lbl2.TextSize = 13; lbl2.TextXAlignment = Enum.TextXAlignment.Left; lbl2.Parent = scroll
-
-addToggle("强制奔跑 (速度 18)", "Speed")
-addToggle("开启速度欺骗 (免耗耐力)", "FakeSpeed")
-
-print("[Ninja Panel v38] 全图打击版已加载")
+print("[Ninja Panel v41] 液态玻璃版加载完毕")
