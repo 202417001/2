@@ -1,6 +1,5 @@
 -- ============================================
--- Ninja Panel v28 (暴力恢复版)
--- 依赖 v27 的状态监听
+-- Ninja Panel v29 (无Hook · 物理强制版)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -8,7 +7,12 @@ local RunService = game:GetService("RunService")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
-local CFG = { ESP = false, ESPHealth = false, ESPRole = false, Scale = 1.0, LockStamina = false }
+local CFG = {
+    ESP = false, ESPHealth = false, ESPRole = false,
+    Speed = false, SpeedVal = 24, -- 游戏默认跑速
+    LockUI = false, -- 强制锁 UI 视觉
+    Scale = 1.0,
+}
 local CN_ROLE_MAP = { ["Chef"]="厨师",["Civilian"]="平民",["Delivery"]="快递员",["Farmer"]="农夫",["Fire"]="消防员",["Medical"]="医生",["Police"]="警察",["Prisoner"]="囚犯",["Road Service"]="路政",["Transit"]="公交司机" }
 
 local function getHiddenGui(name)
@@ -33,7 +37,7 @@ icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = fa
 local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v28 (暴力恢复)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
+title.BorderSizePixel = 0; title.Text = "Ninja v29 (物理强制)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
 local function mkTitleBtn(text, xoff, cb)
@@ -52,7 +56,7 @@ scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main
 local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
 
 local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 36); statusBar.Position = UDim2.new(0, 6, 1, -42)
-statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "等待开启..."
+statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "请开启功能"
 statusBar.TextColor3 = Color3.fromRGB(0, 255, 150); statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12
 statusBar.Parent = main; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
 
@@ -79,58 +83,47 @@ local function getRoleLabel(plr)
 end
 
 -- ==========================================
--- 核心：疯狂发送恢复事件
+-- 核心：无 Hook 的 UI 狂拽与物理锁定
 -- ==========================================
-local currentStamina = "未知"
-local lastStaminaTime = tick()
-local staminaDropRate = 0
-
--- 定时疯狂发包，告诉服务器你要恢复
-local function startSpam()
-    local rs = game:GetService("ReplicatedStorage")
-    local ev = rs:FindFirstChild("Remote") and rs.Remote:FindFirstChild("PlayerEvent")
-    
-    if not ev then statusBar.Text = "找不到 PlayerEvent" return end
-    
-    statusBar.Text = "✔ 正在疯狂刷恢复包..."
-    
-    task.spawn(function()
-        while task.wait(0.1) do
-            if CFG.LockStamina then
-                -- 暴力发送状态 3，数值为 100
-                pcall(function() ev:FireServer(3, 100) end)
-                pcall(function() ev:FireServer(3, 999) end)
-            end
-        end
-    end)
-end
-
--- 拦截真实数值，计算下降速度
-local function startHook()
-    if not hookmetamethod then statusBar.Text = "不支持 Hook" return end
-    local oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-        local method = getnamecallmethod()
-        if not checkcaller() and method == "FireServer" and self.Name == "PlayerEvent" then
-            local args = {...}
-            if type(args[3]) == "number" and args[3] >= 0 and args[3] <= 100 then
-                currentStamina = tostring(math.floor(args[3]))
-            end
-        end
-        return oldNamecall(self, ...)
-    end)
-    statusBar.Text = "✔ Hook 已开启，监控中"
-end
-
 task.spawn(function()
-    while task.wait(0.5) do
-        if currentStamina ~= "未知" then
-            local lockStr = CFG.LockStamina and " (强刷中)" or ""
-            statusBar.Text = "🍗 饥饿: " .. currentHunger .. " | ⚡ 真实耐力: " .. currentStamina .. lockStr
+    while task.wait(0.1) do
+        if CFG.LockUI then
+            -- 暴力遍历左下角 UI 强制拉满 (不卡顿，因为只找特定名字)
+            local pg = LP:FindFirstChild("PlayerGui")
+            if pg then
+                local bottomUI = pg:FindFirstChild("ScreenGui") or pg:FindFirstChild("Bottom")
+                if bottomUI then
+                    for _, obj in ipairs(bottomUI:GetDescendants()) do
+                        if (obj:IsA("Frame") or obj:IsA("ImageLabel")) and obj.Visible then
+                            -- 如果找到类似耐力的进度条，强制拉到满
+                            local n = obj.Name:lower()
+                            if n:find("bar") or n:find("stam") or n:find("energy") or n == "middle" or n:find("flare") then
+                                pcall(function()
+                                    obj.Size = UDim2.new(1, 0, obj.Size.Y.Scale, obj.Size.Y.Offset)
+                                end)
+                            end
+                        end
+                    end
+                end
+            end
         end
     end
 end)
 
--- ---------- ESP 和安全 UI ----------
+-- 物理循环
+RunService.Heartbeat:Connect(function()
+    local char = LP.Character
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    
+    -- 强制无脑奔跑
+    if CFG.Speed then
+        hum.WalkSpeed = CFG.SpeedVal
+    end
+end)
+
+-- ---------- 原生 BillboardGui ESP (极短血条) ----------
 local espData = {}
 local function buildESP(plr)
     if plr == LP then return end; if espData[plr] then return end
@@ -171,8 +164,8 @@ addToggle("透视 玩家名字", "ESP")
 addToggle("透视 血条比例", "ESPHealth")
 addToggle("透视 中文职业", "ESPRole")
 
-addButton("开启数值 Hook", startHook, Color3.fromRGB(50, 150, 200))
-addButton("开启暴力恢复", startSpam, Color3.fromRGB(200, 100, 50))
-addToggle("锁死耐力 (强刷)", "LockStamina")
+addLabel("── 物理强制 (免Hook) ──")
+addToggle("强制奔跑 (锁速)", "Speed")
+addToggle("视觉欺骗 (锁满UI)", "LockUI")
 
-print("[Ninja Panel v28] 已加载")
+print("[Ninja Panel v29] 已加载")
