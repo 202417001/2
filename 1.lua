@@ -1,5 +1,5 @@
 -- ============================================
--- Ninja Panel v32 (UI优先 · 速度欺骗防卡版)
+-- Ninja Panel v33 (速度欺骗 · 限速18)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -9,7 +9,7 @@ local Camera = workspace.CurrentCamera
 
 local CFG = {
     ESP = false, ESPHealth = false, ESPRole = false,
-    Speed = false, SpeedVal = 50, 
+    Speed = false, SpeedVal = 18, -- 这里改成了 18
     FakeSpeed = false,
     Scale = 1.0,
 }
@@ -37,7 +37,7 @@ icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = fa
 local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v32 (速度欺骗)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
+title.BorderSizePixel = 0; title.Text = "Ninja v33 (限速18)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
 local function mkTitleBtn(text, xoff, cb)
@@ -65,9 +65,6 @@ statusBar.BackgroundTransparency = 1; statusBar.Text = "运行正常"
 statusBar.TextColor3 = Color3.fromRGB(0, 255, 150); statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 11
 statusBar.Parent = main
 
--- ==========================================
--- 1. 优先创建所有 UI 按钮（防止卡死无按钮）
--- ==========================================
 local function addButton(text, cb, color)
     local b = Instance.new("TextButton"); b.Size = UDim2.new(1, -6, 0, 34); b.BackgroundColor3 = color or Color3.fromRGB(50, 50, 60)
     b.BorderSizePixel = 0; b.Text = text; b.TextColor3 = Color3.new(1, 1, 1); b.Font = Enum.Font.Gotham; b.TextSize = 14; b.Parent = scroll
@@ -86,14 +83,14 @@ addToggle("透视 玩家名字", "ESP")
 addToggle("透视 血条比例", "ESPHealth")
 addToggle("透视 中文职业", "ESPRole")
 
-local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, -6, 0, 22); lbl.BackgroundTransparency = 1; lbl.Text = "── 速度与耐力突破 ──"
+local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, -6, 0, 22); lbl.BackgroundTransparency = 1; lbl.Text = "── 速度突破 (上限18) ──"
 lbl.TextColor3 = Color3.fromRGB(160, 160, 180); lbl.Font = Enum.Font.GothamBold; lbl.TextSize = 13; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = scroll
 
-addToggle("强制奔跑 (实际速度 50)", "Speed")
+addToggle("强制奔跑 (速度 18)", "Speed")
 addToggle("开启速度欺骗 (免耗耐力)", "FakeSpeed")
 
 -- ==========================================
--- 2. 安全注入 Hook
+-- 安全注入 Hook
 -- ==========================================
 local oldIndex
 local function setupFakeSpeed()
@@ -115,13 +112,13 @@ local function setupFakeSpeed()
         end)
     end)
     if not ok then
-        statusBar.Text = "Hook 注入失败，可能卡顿"
+        statusBar.Text = "Hook 注入失败"
     end
 end
 setupFakeSpeed()
 
 -- ==========================================
--- 3. 功能逻辑
+-- 速度与监控逻辑
 -- ==========================================
 local lastPos = Vector3.new(0, 0, 0)
 local lastTime = tick()
@@ -134,7 +131,7 @@ RunService.Heartbeat:Connect(function()
     if not hum or not hrp then return end
     
     if CFG.Speed then
-        hum.WalkSpeed = CFG.SpeedVal
+        hum.WalkSpeed = CFG.SpeedVal -- 18
     end
     
     local now = tick()
@@ -143,7 +140,7 @@ RunService.Heartbeat:Connect(function()
         local dist = (hrp.Position - lastPos).Magnitude
         local realSpeed = math.floor(dist / dt)
         speedDisplay.Text = "真实速度: " .. tostring(realSpeed) .. " studs/s"
-        speedDisplay.TextColor3 = (realSpeed > 20) and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
+        speedDisplay.TextColor3 = (realSpeed >= 15) and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
         lastPos = hrp.Position
         lastTime = now
     end
@@ -194,4 +191,4 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-print("[Ninja Panel v32] 速度欺骗版已加载")
+print("[Ninja Panel v33] 限速18版已加载")
