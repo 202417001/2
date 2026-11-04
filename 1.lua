@@ -1,9 +1,10 @@
 -- ============================================
--- Ninja Panel v17 (全游戏暴力搜索版)
+-- Ninja Panel v18 (注册表扫描 & Tween Hook)
 -- ============================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
@@ -32,7 +33,7 @@ icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = fa
 local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v17 (暴力搜索)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
+title.BorderSizePixel = 0; title.Text = "Ninja v18 (Hook拦截)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
 local function mkTitleBtn(text, xoff, cb)
@@ -51,7 +52,7 @@ scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main
 local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
 
 local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 36); statusBar.Position = UDim2.new(0, 6, 1, -42)
-statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "等待搜索"; statusBar.TextColor3 = Color3.fromRGB(0, 255, 150)
+statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "等待 Hook..."; statusBar.TextColor3 = Color3.fromRGB(0, 255, 150)
 statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12; statusBar.Parent = main; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
 
 local function addButton(text, cb, color)
@@ -81,75 +82,96 @@ local function getRoleLabel(plr)
     return "平民"
 end
 
--- ---------- 暴力搜索 ----------
-local function bruteForceSearch()
-    local L = {"===== 全游戏暴力搜索 ====="}
-    local foundAnything = false
-    local keywords = {"stamina", "hunger", "food", "energy", "thirst", "sprint", "耐力", "饥饿"}
-    
-    -- 搜 Workspace 和 ReplicatedStorage 等
-    local services = {"ReplicatedStorage", "Workspace", "ReplicatedFirst"}
-    for _, sName in ipairs(services) do
-        local srv = game:GetService(sName)
-        for _, obj in ipairs(srv:GetDescendants()) do
-            -- 1. 搜数值对象
-            if obj:IsA("NumberValue") or obj:IsA("IntValue") then
-                local n = obj.Name:lower()
-                for _, kw in ipairs(keywords) do
-                    if n:find(kw) then
-                        table.insert(L, "[数值对象] " .. obj:GetFullName() .. " = " .. tostring(obj.Value))
-                        foundAnything = true
-                    end
-                end
-            end
-            -- 2. 搜属性
-            local attrs = obj:GetAttributes()
-            for aName, aVal in pairs(attrs) do
-                local n = aName:lower()
-                for _, kw in ipairs(keywords) do
-                    if n:find(kw) then
-                        table.insert(L, "[属性] " .. obj:GetFullName() .. " : " .. aName .. " = " .. tostring(aVal))
-                        foundAnything = true
+-- ==========================================
+-- 核心科技：注册表扫描 & Tween Hook
+-- ==========================================
+local capturedStamina = "未知"
+local capturedHunger = "未知"
+
+-- 1. 扫描注册表 (获取深层变量)
+local function scanRegistry()
+    local count = 0
+    local ok, err = pcall(function()
+        for _, obj in pairs(debug.getregistry()) do
+            if type(obj) == "table" then
+                for k, v in pairs(obj) do
+                    if type(k) == "string" then
+                        local lk = k:lower()
+                        if lk == "stamina" or lk == "hunger" or lk == "food" or lk == "energy" then
+                            if type(v) == "number" then
+                                if lk:find("stamina") or lk:find("energy") then capturedStamina = tostring(math.floor(v)) .. "%" end
+                                if lk:find("hunger") or lk:find("food") then capturedHunger = tostring(math.floor(v)) .. "%" end
+                                count = count + 1
+                            end
+                        end
                     end
                 end
             end
         end
+    end)
+    if not ok then
+        statusBar.Text = "你的执行器不支持 debug.getregistry"
+    elseif count > 0 then
+        statusBar.Text = "扫描成功！已获取数值"
+    else
+        statusBar.Text = "注册表未找到变量，尝试 Hook UI"
     end
-    
-    -- 搜玩家自身
-    local char = LP.Character
-    if char then
-        for _, obj in ipairs(char:GetDescendants()) do
-            if obj:IsA("NumberValue") or obj:IsA("IntValue") then
-                table.insert(L, "[自身数值] " .. obj.Name .. " = " .. tostring(obj.Value))
-                foundAnything = true
-            end
-        end
-    end
-
-    if not foundAnything then
-        table.insert(L, "没找到任何名字带耐/饿的变量。")
-        table.insert(L, "这游戏大概率用了混淆名(如 val1, val2)。")
-        table.insert(L, "只能用网络拦截钩子了。")
-    end
-
-    -- 弹窗
-    local oldWin = mainGui:FindFirstChild("BruteWin"); if oldWin then oldWin:Destroy() end
-    local win = Instance.new("Frame"); win.Size = UDim2.fromOffset(340, 320); win.Position = UDim2.fromScale(0.5, 0.5); win.AnchorPoint = Vector2.new(0.5, 0.5)
-    win.BackgroundColor3 = Color3.fromRGB(15, 15, 20); win.Parent = mainGui; Instance.new("UICorner", win).CornerRadius = UDim.new(0, 8)
-    local wtitle = Instance.new("TextLabel"); wtitle.Size = UDim2.new(1, 0, 0, 30); wtitle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-    wtitle.Text = "暴力搜索结果"; wtitle.TextColor3 = Color3.new(1, 1, 1); wtitle.Font = Enum.Font.GothamBold; wtitle.Parent = win
-    Instance.new("UICorner", wtitle).CornerRadius = UDim.new(0, 8)
-    local wclose = Instance.new("TextButton"); wclose.Size = UDim2.fromOffset(28, 28); wclose.Position = UDim2.new(1, -30, 0, 1)
-    wclose.BackgroundColor3 = Color3.fromRGB(120, 40, 40); wclose.Text = "×"; wclose.TextColor3 = Color3.new(1, 1, 1); wclose.Parent = win
-    Instance.new("UICorner", wclose).CornerRadius = UDim.new(0, 6); wclose.MouseButton1Click:Connect(function() win:Destroy() end)
-    local wscroll = Instance.new("ScrollingFrame"); wscroll.Size = UDim2.new(1, -12, 1, -40); wscroll.Position = UDim2.fromOffset(6, 34)
-    wscroll.BackgroundTransparency = 1; wscroll.CanvasSize = UDim2.new(0, 0, 0, 0); wscroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; wscroll.Parent = win
-    local wtext = Instance.new("TextLabel"); wtext.Size = UDim2.new(1, -6, 0, 0); wtext.AutomaticSize = Enum.AutomaticSize.Y
-    wtext.BackgroundTransparency = 1; wtext.Text = table.concat(L, "\n"); wtext.TextColor3 = Color3.fromRGB(220, 220, 230)
-    wtext.Font = Enum.Font.Code; wtext.TextSize = 11; wtext.TextXAlignment = Enum.TextXAlignment.Left; wtext.TextYAlignment = Enum.TextYAlignment.Top
-    wtext.TextWrapped = true; wtext.Parent = wscroll
 end
+
+-- 2. Hook TweenService (拦截进度条动画)
+local hooked = false
+local function startTweenHook()
+    if hooked then return end
+    if not hookmetamethod then
+        statusBar.Text = "执行器不支持 Hook"
+        return
+    end
+    
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        if not checkcaller() and method == "Create" and self == TweenService then
+            local instance = select(1, ...)
+            local goal = select(3, ...)
+            if instance and goal then
+                -- 抓取正在变化的 UI
+                if instance:IsA("ImageLabel") or instance:IsA("Frame") or instance:IsA("TextLabel") then
+                    if goal.Size or goal.ImageTransparency or goal.ImageRectOffset then
+                        -- 智能识别：如果 UI 在左下角，或者名字里有 bar / stamina / hunger
+                        local nameLower = instance.Name:lower()
+                        if nameLower:find("stamina") or nameLower:find("energy") or nameLower:find("hunger") or nameLower:find("food") or nameLower:find("bar") then
+                            -- 提取 Size 比例或透明度当作数值
+                            local val = "变化中"
+                            if goal.Size then val = "比例:" .. tostring(math.floor((goal.Size.X.Scale or 0)*100)) .. "%"
+                            elseif goal.ImageTransparency then val = "透明:" .. tostring(math.floor((1 - goal.ImageTransparency)*100)) .. "%" end
+                            
+                            if nameLower:find("stamina") or nameLower:find("energy") then capturedStamina = val end
+                            if nameLower:find("hunger") or nameLower:find("food") then capturedHunger = val end
+                        end
+                    end
+                end
+            end
+        end
+        return oldNamecall(self, ...)
+    end)
+    
+    hooked = true
+    statusBar.Text = "Hook 成功！去跑动或吃东西。"
+end
+
+-- 3. 启动时扫描一次
+scanRegistry()
+
+-- 定时更新底部状态栏
+task.spawn(function()
+    while task.wait(1) do
+        -- 如果注册表没扫到，且没 Hook，就再扫一次
+        if capturedStamina == "未知" or capturedHunger == "未知" then
+            scanRegistry()
+        end
+        statusBar.Text = "🍗 饥饿: " .. capturedHunger .. "  |  ⚡ 耐力: " .. capturedStamina
+    end
+end)
 
 -- ---------- 原生 BillboardGui ESP (极短血条) ----------
 local espData = {}
@@ -199,12 +221,13 @@ addToggle("透视 玩家名字", "ESP")
 addToggle("透视 血条百分比", "ESPHealth")
 addToggle("透视 中文职业", "ESPRole")
 
-addLabel("── 暴力查找 ──")
-addButton("全游戏暴力搜索", bruteForceSearch, Color3.fromRGB(200, 100, 50))
+addLabel("── 终极逆向 ──")
+addButton("1. 强制扫描注册表", scanRegistry, Color3.fromRGB(200, 150, 50))
+addButton("2. 开启 UI Hook 拦截", startTweenHook, Color3.fromRGB(180, 50, 100))
 
 addLabel("── 自身修改 ──")
 addToggle("移动加速", "Speed")
 addToggle("高跳", "Jump")
 addToggle("穿墙 (Noclip)", "Noclip")
 
-print("[Ninja Panel v17] 已加载")
+print("[Ninja Panel v18] 已加载")
