@@ -1,5 +1,5 @@
 -- ============================================
--- Ninja Panel v29 (无Hook · 物理强制版)
+-- Ninja Panel v31 (速度欺骗 · 卡耐力底层逻辑)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -9,8 +9,8 @@ local Camera = workspace.CurrentCamera
 
 local CFG = {
     ESP = false, ESPHealth = false, ESPRole = false,
-    Speed = false, SpeedVal = 24, -- 游戏默认跑速
-    LockUI = false, -- 强制锁 UI 视觉
+    Speed = false, SpeedVal = 50, -- 真实跑速，直接拉高
+    FakeSpeed = false, -- 欺骗开关
     Scale = 1.0,
 }
 local CN_ROLE_MAP = { ["Chef"]="厨师",["Civilian"]="平民",["Delivery"]="快递员",["Farmer"]="农夫",["Fire"]="消防员",["Medical"]="医生",["Police"]="警察",["Prisoner"]="囚犯",["Road Service"]="路政",["Transit"]="公交司机" }
@@ -25,7 +25,7 @@ end
 local mainGui = getHiddenGui("MainPanel_" .. math.random(1000, 9999))
 local espGui = getHiddenGui("EspRender_" .. math.random(1000, 9999))
 
-local main = Instance.new("Frame"); main.Size = UDim2.fromOffset(300, 420); main.Position = UDim2.fromScale(0.02, 0.2)
+local main = Instance.new("Frame"); main.Size = UDim2.fromOffset(300, 440); main.Position = UDim2.fromScale(0.02, 0.2)
 main.BackgroundColor3 = Color3.fromRGB(20, 20, 24); main.BorderSizePixel = 0; main.Active = true; main.Draggable = true; main.Parent = mainGui
 Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
 local uiScale = Instance.new("UIScale"); uiScale.Scale = 1; uiScale.Parent = main
@@ -37,7 +37,7 @@ icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = fa
 local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v29 (物理强制)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
+title.BorderSizePixel = 0; title.Text = "Ninja v31 (速度欺骗)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
 local function mkTitleBtn(text, xoff, cb)
@@ -50,15 +50,20 @@ mkTitleBtn("−", -94, function() uiScale.Scale = math.max(0.6, uiScale.Scale - 
 mkTitleBtn("+", -64, function() uiScale.Scale = math.min(1.8, uiScale.Scale + 0.1) end)
 mkTitleBtn("▁", -32, minimize)
 
-local scroll = Instance.new("ScrollingFrame"); scroll.Size = UDim2.new(1, -12, 1, -80); scroll.Position = UDim2.fromOffset(6, 38)
+local scroll = Instance.new("ScrollingFrame"); scroll.Size = UDim2.new(1, -12, 1, -100); scroll.Position = UDim2.fromOffset(6, 38)
 scroll.BackgroundTransparency = 1; scroll.BorderSizePixel = 0; scroll.ScrollBarThickness = 4; scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main
 local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
 
-local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 36); statusBar.Position = UDim2.new(0, 6, 1, -42)
-statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "请开启功能"
-statusBar.TextColor3 = Color3.fromRGB(0, 255, 150); statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12
-statusBar.Parent = main; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
+local speedDisplay = Instance.new("TextLabel"); speedDisplay.Size = UDim2.new(1, -12, 0, 36); speedDisplay.Position = UDim2.new(0, 6, 1, -62)
+speedDisplay.BackgroundColor3 = Color3.fromRGB(40, 20, 20); speedDisplay.BorderSizePixel = 0; speedDisplay.Text = "真实速度: 0 studs/s"
+speedDisplay.TextColor3 = Color3.fromRGB(255, 100, 100); speedDisplay.Font = Enum.Font.GothamBold; speedDisplay.TextSize = 13
+speedDisplay.Parent = main; Instance.new("UICorner", speedDisplay).CornerRadius = UDim.new(0, 6)
+
+local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 20); statusBar.Position = UDim2.new(0, 6, 1, -20)
+statusBar.BackgroundTransparency = 1; statusBar.Text = "设置速度: 50"
+statusBar.TextColor3 = Color3.fromRGB(0, 255, 150); statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 11
+statusBar.Parent = main
 
 local function addButton(text, cb, color)
     local b = Instance.new("TextButton"); b.Size = UDim2.new(1, -6, 0, 34); b.BackgroundColor3 = color or Color3.fromRGB(50, 50, 60)
@@ -83,43 +88,59 @@ local function getRoleLabel(plr)
 end
 
 -- ==========================================
--- 核心：无 Hook 的 UI 狂拽与物理锁定
+-- 核心：轻量级 __index 速度欺骗
 -- ==========================================
-task.spawn(function()
-    while task.wait(0.1) do
-        if CFG.LockUI then
-            -- 暴力遍历左下角 UI 强制拉满 (不卡顿，因为只找特定名字)
-            local pg = LP:FindFirstChild("PlayerGui")
-            if pg then
-                local bottomUI = pg:FindFirstChild("ScreenGui") or pg:FindFirstChild("Bottom")
-                if bottomUI then
-                    for _, obj in ipairs(bottomUI:GetDescendants()) do
-                        if (obj:IsA("Frame") or obj:IsA("ImageLabel")) and obj.Visible then
-                            -- 如果找到类似耐力的进度条，强制拉到满
-                            local n = obj.Name:lower()
-                            if n:find("bar") or n:find("stam") or n:find("energy") or n == "middle" or n:find("flare") then
-                                pcall(function()
-                                    obj.Size = UDim2.new(1, 0, obj.Size.Y.Scale, obj.Size.Y.Offset)
-                                end)
-                            end
-                        end
-                    end
-                end
+local oldIndex
+local function setupFakeSpeed()
+    if not hookmetamethod then statusBar.Text = "执行器不支持 Hook" return end
+    
+    oldIndex = hookmetamethod(game, "__index", function(t, k)
+        -- 如果开启欺骗，且游戏内部脚本(不是我们)在读取速度
+        if CFG.FakeSpeed and not checkcaller() then
+            if k == "WalkSpeed" and t:IsA("Humanoid") then
+                return 16 -- 游戏读取时，骗它说我们用的是默认走路速度
+            elseif k == "Velocity" and t:IsA("BasePart") then
+                -- 如果游戏读角色的速度，返回一个假的速度
+                local realVel = oldIndex(t, k)
+                return realVel.Unit * 16 -- 假设 16 的移动速度
             end
         end
-    end
-end)
+        return oldIndex(t, k)
+    end)
+    statusBar.Text = "✔ 速度欺骗已注入"
+end
 
--- 物理循环
+setupFakeSpeed()
+
+-- 物理与速度监控循环
+local lastPos = Vector3.new(0, 0, 0)
+local lastTime = tick()
+
 RunService.Heartbeat:Connect(function()
     local char = LP.Character
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hum or not hrp then return end
     
-    -- 强制无脑奔跑
+    -- 1. 物理强制设定速度
     if CFG.Speed then
         hum.WalkSpeed = CFG.SpeedVal
+    end
+    statusBar.Text = "设置速度: " .. tostring(math.floor(CFG.SpeedVal)) .. " (欺骗状态: " .. (CFG.FakeSpeed and "开" or "关") .. ")"
+    
+    -- 2. 真实速度计算
+    local now = tick()
+    local dt = now - lastTime
+    if dt > 0.05 then
+        local dist = (hrp.Position - lastPos).Magnitude
+        local realSpeed = math.floor(dist / dt)
+        
+        speedDisplay.Text = "真实速度: " .. tostring(realSpeed) .. " studs/s"
+        speedDisplay.TextColor3 = (realSpeed > 20) and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 100, 100)
+        
+        lastPos = hrp.Position
+        lastTime = now
     end
 end)
 
@@ -164,8 +185,8 @@ addToggle("透视 玩家名字", "ESP")
 addToggle("透视 血条比例", "ESPHealth")
 addToggle("透视 中文职业", "ESPRole")
 
-addLabel("── 物理强制 (免Hook) ──")
-addToggle("强制奔跑 (锁速)", "Speed")
-addToggle("视觉欺骗 (锁满UI)", "LockUI")
+addLabel("── 速度与耐力突破 ──")
+addToggle("强制奔跑 (实际速度 50)", "Speed")
+addToggle("开启速度欺骗 (免耗耐力)", "FakeSpeed")
 
-print("[Ninja Panel v29] 已加载")
+print("[Ninja Panel v31] 速度欺骗版已加载")
