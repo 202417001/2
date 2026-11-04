@@ -1,5 +1,5 @@
 -- ============================================
--- Ninja Panel v18 (注册表扫描 & Tween Hook)
+-- Ninja Panel v19 (网络与动画双频拦截版)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -33,7 +33,7 @@ icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = fa
 local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v18 (Hook拦截)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
+title.BorderSizePixel = 0; title.Text = "Ninja v19 (双频拦截)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
 local function mkTitleBtn(text, xoff, cb)
@@ -52,7 +52,7 @@ scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main
 local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
 
 local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 36); statusBar.Position = UDim2.new(0, 6, 1, -42)
-statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "等待 Hook..."; statusBar.TextColor3 = Color3.fromRGB(0, 255, 150)
+statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "等待拦截..."; statusBar.TextColor3 = Color3.fromRGB(0, 255, 150)
 statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12; statusBar.Parent = main; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
 
 local function addButton(text, cb, color)
@@ -83,93 +83,83 @@ local function getRoleLabel(plr)
 end
 
 -- ==========================================
--- 核心科技：注册表扫描 & Tween Hook
+-- 核心科技：Hook 拦截
 -- ==========================================
 local capturedStamina = "未知"
 local capturedHunger = "未知"
+local logData = {}
 
--- 1. 扫描注册表 (获取深层变量)
-local function scanRegistry()
-    local count = 0
-    local ok, err = pcall(function()
-        for _, obj in pairs(debug.getregistry()) do
-            if type(obj) == "table" then
-                for k, v in pairs(obj) do
-                    if type(k) == "string" then
-                        local lk = k:lower()
-                        if lk == "stamina" or lk == "hunger" or lk == "food" or lk == "energy" then
-                            if type(v) == "number" then
-                                if lk:find("stamina") or lk:find("energy") then capturedStamina = tostring(math.floor(v)) .. "%" end
-                                if lk:find("hunger") or lk:find("food") then capturedHunger = tostring(math.floor(v)) .. "%" end
-                                count = count + 1
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end)
-    if not ok then
-        statusBar.Text = "你的执行器不支持 debug.getregistry"
-    elseif count > 0 then
-        statusBar.Text = "扫描成功！已获取数值"
-    else
-        statusBar.Text = "注册表未找到变量，尝试 Hook UI"
-    end
-end
-
--- 2. Hook TweenService (拦截进度条动画)
-local hooked = false
-local function startTweenHook()
-    if hooked then return end
-    if not hookmetamethod then
-        statusBar.Text = "执行器不支持 Hook"
-        return
-    end
-    
-    local oldNamecall
-    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+-- 拦截网络包
+local function startRemoteHook()
+    if not hookmetamethod then statusBar.Text = "不支持 Hook" return end
+    local oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
-        if not checkcaller() and method == "Create" and self == TweenService then
-            local instance = select(1, ...)
-            local goal = select(3, ...)
-            if instance and goal then
-                -- 抓取正在变化的 UI
-                if instance:IsA("ImageLabel") or instance:IsA("Frame") or instance:IsA("TextLabel") then
-                    if goal.Size or goal.ImageTransparency or goal.ImageRectOffset then
-                        -- 智能识别：如果 UI 在左下角，或者名字里有 bar / stamina / hunger
-                        local nameLower = instance.Name:lower()
-                        if nameLower:find("stamina") or nameLower:find("energy") or nameLower:find("hunger") or nameLower:find("food") or nameLower:find("bar") then
-                            -- 提取 Size 比例或透明度当作数值
-                            local val = "变化中"
-                            if goal.Size then val = "比例:" .. tostring(math.floor((goal.Size.X.Scale or 0)*100)) .. "%"
-                            elseif goal.ImageTransparency then val = "透明:" .. tostring(math.floor((1 - goal.ImageTransparency)*100)) .. "%" end
-                            
-                            if nameLower:find("stamina") or nameLower:find("energy") then capturedStamina = val end
-                            if nameLower:find("hunger") or nameLower:find("food") then capturedHunger = val end
-                        end
+        if not checkcaller() then
+            if method == "FireServer" or method == "InvokeServer" then
+                local args = {...}
+                for _, arg in pairs(args) do
+                    if type(arg) == "number" and arg >= 0 and arg <= 100 then
+                        -- 记录所有发送的数字
+                        table.insert(logData, self.Name .. " 发送: " .. tostring(arg))
+                        if #logData > 50 then table.remove(logData, 1) end
                     end
                 end
             end
         end
         return oldNamecall(self, ...)
     end)
-    
-    hooked = true
-    statusBar.Text = "Hook 成功！去跑动或吃东西。"
 end
 
--- 3. 启动时扫描一次
-scanRegistry()
+-- 拦截 Tween 动画 (这次绝不干涉游戏运行)
+local function startTweenHook()
+    if not hookmetamethod then return end
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        if getnamecallmethod() == "Create" and self == TweenService then
+            local instance = select(1, ...)
+            local goal = select(3, ...)
+            
+            if instance and goal and not checkcaller() then
+                -- 抓取变动
+                if instance:IsA("Frame") or instance:IsA("ImageLabel") or instance:IsA("TextLabel") then
+                    local val = nil
+                    if goal.Size then val = math.floor((goal.Size.X.Scale or 0) * 100) .. "%"
+                    elseif goal.ImageTransparency then val = math.floor((1 - goal.ImageTransparency) * 100) .. "%"
+                    elseif goal.Text then val = goal.Text end
+                    
+                    if val then
+                        local nameLower = instance.Name:lower()
+                        local parentLower = instance.Parent and instance.Parent.Name:lower() or ""
+                        
+                        -- 根据名字或父级猜
+                        if nameLower:find("stamina") or parentLower:find("stamina") or nameLower:find("energy") or parentLower:find("sprint") then
+                            capturedStamina = val
+                        elseif nameLower:find("hunger") or parentLower:find("hunger") or nameLower:find("food") then
+                            capturedHunger = val
+                        elseif nameLower == "bar" or parentLower:find("bar") then
+                            -- 如果没有名字，按顺序猜（通常是先饥饿后耐力）
+                            if capturedHunger == "未知" then capturedHunger = val
+                            elseif capturedStamina == "未知" then capturedStamina = val end
+                        end
+                    end
+                end
+            end
+        end
+        return oldNamecall(self, ...) -- 必须原样返回，保证游戏正常显示！
+    end)
+end
 
--- 定时更新底部状态栏
+startRemoteHook()
+startTweenHook()
+
+-- 定时刷新
 task.spawn(function()
     while task.wait(1) do
-        -- 如果注册表没扫到，且没 Hook，就再扫一次
-        if capturedStamina == "未知" or capturedHunger == "未知" then
-            scanRegistry()
+        if capturedStamina ~= "未知" or capturedHunger ~= "未知" then
+            statusBar.Text = "🍗 饥饿: " .. capturedHunger .. "  |  ⚡ 耐力: " .. capturedStamina
+        else
+            statusBar.Text = "Hook 已开启，请跑动或吃东西"
         end
-        statusBar.Text = "🍗 饥饿: " .. capturedHunger .. "  |  ⚡ 耐力: " .. capturedStamina
     end
 end)
 
@@ -221,13 +211,9 @@ addToggle("透视 玩家名字", "ESP")
 addToggle("透视 血条百分比", "ESPHealth")
 addToggle("透视 中文职业", "ESPRole")
 
-addLabel("── 终极逆向 ──")
-addButton("1. 强制扫描注册表", scanRegistry, Color3.fromRGB(200, 150, 50))
-addButton("2. 开启 UI Hook 拦截", startTweenHook, Color3.fromRGB(180, 50, 100))
-
 addLabel("── 自身修改 ──")
 addToggle("移动加速", "Speed")
 addToggle("高跳", "Jump")
 addToggle("穿墙 (Noclip)", "Noclip")
 
-print("[Ninja Panel v18] 已加载")
+print("[Ninja Panel v19] 已加载，双频监听中")
