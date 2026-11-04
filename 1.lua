@@ -1,6 +1,5 @@
 -- ============================================
--- Ninja Panel v15 (内存变量扫描)
--- 需执行器支持 getgc (忍者/Delta/Fluxus 均支持)
+-- Ninja Panel v16 (闭包变量 & 像素级捕捉)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -33,7 +32,7 @@ icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = fa
 local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v15 (内存扫描)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
+title.BorderSizePixel = 0; title.Text = "Ninja v16 (终极捕获)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
 local function mkTitleBtn(text, xoff, cb)
@@ -52,7 +51,7 @@ scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main
 local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
 
 local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 36); statusBar.Position = UDim2.new(0, 6, 1, -42)
-statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "等待操作内存"; statusBar.TextColor3 = Color3.fromRGB(0, 255, 150)
+statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "等待操作..."; statusBar.TextColor3 = Color3.fromRGB(0, 255, 150)
 statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12; statusBar.Parent = main; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
 
 local function addButton(text, cb, color)
@@ -82,52 +81,90 @@ local function getRoleLabel(plr)
     return "平民"
 end
 
--- ---------- 内存扫描核心 ----------
-local gcCache = {}
+-- ---------- 终极双路捕捉 (闭包 + UI像素) ----------
+local uiCache = {}
+local upCache = {}
 
-local function takeSnapshot()
-    gcCache = {}
-    local count = 0
-    -- 遍历垃圾回收器里的所有表
-    for _, v in pairs(getgc()) do
-        if type(v) == "table" then
-            for k, val in pairs(v) do
-                -- 只记录 0 到 100 之间的数字（耐力和饥饿通常在这个区间）
-                if type(val) == "number" and val >= 0 and val <= 100 then
-                    gcCache[v] = gcCache[v] or {}
-                    gcCache[v][k] = val
-                    count = count + 1
+local function captureData()
+    uiCache = {}
+    upCache = {}
+    
+    -- 1. 扫 UI 像素和文本 (强力抓 AbsoluteSize 和 Offset)
+    local pg = LP:FindFirstChild("PlayerGui")
+    if pg then
+        for _, obj in ipairs(pg:GetDescendants()) do
+            local key = obj:GetFullName()
+            local d = {}
+            if obj:IsA("TextLabel") then d.text = obj.Text end
+            if obj:IsA("Frame") or obj:IsA("ImageLabel") then
+                d.absX = obj.AbsoluteSize.X
+                d.offX = obj.Size.X.Offset
+                d.scaleX = obj.Size.X.Scale
+                if obj:IsA("ImageLabel") then
+                    d.rectX = obj.ImageRectSize.X
+                    d.rectOffX = obj.ImageRectOffset.X
+                end
+            end
+            uiCache[key] = d
+        end
+    end
+    
+    -- 2. 扫内存闭包变量 (Upvalues)
+    for i, v in pairs(getgc()) do
+        if type(v) == "function" then
+            local ok, ups = pcall(function() return debug.getupvalues and debug.getupvalues(v) or getupvalues(v) end)
+            if ok and ups then
+                for k, val in pairs(ups) do
+                    if type(val) == "number" and val >= 0 and val <= 100 then
+                        upCache[i] = upCache[i] or {}
+                        upCache[i][k] = val
+                    end
                 end
             end
         end
     end
-    return count
 end
 
-local function compareSnapshot()
-    local L = {"===== 内存变动结果 ====="}
+local function compareData()
+    local L = {"===== 终极抓取结果 ====="}
     local found = false
     
-    for _, v in pairs(getgc()) do
-        if type(v) == "table" and gcCache[v] then
-            for k, val in pairs(v) do
-                if type(val) == "number" and gcCache[v][k] and gcCache[v][k] ~= val then
-                    -- 排除了位置(Position)相关的变动，只找特定的值
-                    if k ~= 1 and k ~= 2 and k ~= 3 and k ~= "X" and k ~= "Y" and k ~= "Z" then
+    -- 1. 对比 UI
+    for k, d in pairs(uiCache) do
+        local obj = LP.PlayerGui:FindFirstChild(k, true) or game:GetService("CoreGui"):FindFirstChild(k, true)
+        if obj then
+            for prop, oldVal in pairs(d) do
+                local newVal
+                if prop == "text" then newVal = obj.Text
+                elseif prop == "absX" then newVal = obj.AbsoluteSize.X
+                elseif prop == "offX" then newVal = obj.Size.X.Offset
+                elseif prop == "scaleX" then newVal = obj.Size.X.Scale
+                elseif prop == "rectX" then newVal = obj.ImageRectSize.X
+                elseif prop == "rectOffX" then newVal = obj.ImageRectOffset.X
+                end
+                
+                if newVal and tostring(oldVal) ~= tostring(newVal) then
+                    -- 忽略那些乱七八糟的距离导航和聊天
+                    if not k:lower():find("navigation") and not k:lower():find("chat") and not k:lower():find("quantity") then
                         found = true
-                        table.insert(L, "找到了变化变量！")
-                        table.insert(L, "变量名/索引: " .. tostring(k))
-                        table.insert(L, "变化: " .. tostring(gcCache[v][k]) .. " -> " .. tostring(val))
-                        
-                        -- 尝试看看这个表里还有什么其他数据，方便辨认
-                        local context = {}
-                        for ck, cv in pairs(v) do
-                            if type(ck) == "string" and type(cv) ~= "table" and type(cv) ~= "function" then
-                                table.insert(context, ck .. "=" .. tostring(cv))
-                            end
-                        end
-                        table.insert(L, "环境表: {" .. table.concat(context, ", ") .. "}")
-                        table.insert(L, "")
+                        table.insert(L, "[UI变动] " .. k)
+                        table.insert(L, "  属性: " .. prop .. " | " .. tostring(oldVal) .. " -> " .. tostring(newVal))
+                    end
+                end
+            end
+        end
+    end
+    
+    -- 2. 对比闭包
+    for i, v in pairs(getgc()) do
+        if type(v) == "function" and upCache[i] then
+            local ok, ups = pcall(function() return debug.getupvalues and debug.getupvalues(v) or getupvalues(v) end)
+            if ok and ups then
+                for k, val in pairs(ups) do
+                    if type(val) == "number" and upCache[i][k] and upCache[i][k] ~= val then
+                        found = true
+                        table.insert(L, "[闭包变量] 函数ID:" .. tostring(i) .. " | 变量:" .. tostring(k))
+                        table.insert(L, "  变化: " .. tostring(upCache[i][k]) .. " -> " .. tostring(val))
                     end
                 end
             end
@@ -135,32 +172,28 @@ local function compareSnapshot()
     end
     
     if not found then
-        table.insert(L, "内存里没找到明显的数字变动。可能被封包加密了。")
+        table.insert(L, "仍然没抓到！这说明饥饿/耐力根本没下发到客户端，完全在服务端运算。")
     end
     
     -- 弹窗
-    local oldWin = mainGui:FindFirstChild("MemWin"); if oldWin then oldWin:Destroy() end
+    local oldWin = mainGui:FindFirstChild("Win"); if oldWin then oldWin:Destroy() end
     local win = Instance.new("Frame"); win.Size = UDim2.fromOffset(340, 320); win.Position = UDim2.fromScale(0.5, 0.5); win.AnchorPoint = Vector2.new(0.5, 0.5)
     win.BackgroundColor3 = Color3.fromRGB(15, 15, 20); win.Parent = mainGui; Instance.new("UICorner", win).CornerRadius = UDim.new(0, 8)
-    
     local wtitle = Instance.new("TextLabel"); wtitle.Size = UDim2.new(1, 0, 0, 30); wtitle.BackgroundColor3 = Color3.fromRGB(180, 40, 40)
-    wtitle.Text = "内存对比结果"; wtitle.TextColor3 = Color3.new(1, 1, 1); wtitle.Font = Enum.Font.GothamBold; wtitle.Parent = win
+    wtitle.Text = "捕获结果 (截图发我)"; wtitle.TextColor3 = Color3.new(1, 1, 1); wtitle.Font = Enum.Font.GothamBold; wtitle.Parent = win
     Instance.new("UICorner", wtitle).CornerRadius = UDim.new(0, 8)
-    
     local wclose = Instance.new("TextButton"); wclose.Size = UDim2.fromOffset(28, 28); wclose.Position = UDim2.new(1, -30, 0, 1)
     wclose.BackgroundColor3 = Color3.fromRGB(120, 40, 40); wclose.Text = "×"; wclose.TextColor3 = Color3.new(1, 1, 1); wclose.Parent = win
     Instance.new("UICorner", wclose).CornerRadius = UDim.new(0, 6); wclose.MouseButton1Click:Connect(function() win:Destroy() end)
-    
     local wscroll = Instance.new("ScrollingFrame"); wscroll.Size = UDim2.new(1, -12, 1, -40); wscroll.Position = UDim2.fromOffset(6, 34)
     wscroll.BackgroundTransparency = 1; wscroll.CanvasSize = UDim2.new(0, 0, 0, 0); wscroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; wscroll.Parent = win
-    
     local wtext = Instance.new("TextLabel"); wtext.Size = UDim2.new(1, -6, 0, 0); wtext.AutomaticSize = Enum.AutomaticSize.Y
     wtext.BackgroundTransparency = 1; wtext.Text = table.concat(L, "\n"); wtext.TextColor3 = Color3.fromRGB(220, 220, 230)
     wtext.Font = Enum.Font.Code; wtext.TextSize = 11; wtext.TextXAlignment = Enum.TextXAlignment.Left; wtext.TextYAlignment = Enum.TextYAlignment.Top
     wtext.TextWrapped = true; wtext.Parent = wscroll
 end
 
--- ---------- ESP ----------
+-- ---------- 原生 BillboardGui ESP (极短血条) ----------
 local espData = {}
 local function buildESP(plr)
     if plr == LP then return end; if espData[plr] then return end
@@ -208,15 +241,16 @@ addToggle("透视 玩家名字", "ESP")
 addToggle("透视 血条百分比", "ESPHealth")
 addToggle("透视 中文职业", "ESPRole")
 
-addLabel("── 终极内存抓取 ──")
-addButton("1. 拍下内存快照", function()
-    local count = takeSnapshot()
-    statusBar.Text = "快照成功！记录了 " .. count .. " 个数值"
+addLabel("── 终极抓取 ──")
+addButton("1. 拍快照 (别动)", function()
+    statusBar.Text = "正在深度拍照..."
+    captureData()
+    statusBar.Text = "✔ 快照完成，去跑步消耗耐力！"
 end, Color3.fromRGB(50, 150, 200))
 
-addButton("2. 对比内存变动 (跑完点)", function()
+addButton("2. 对比变动 (跑完点)", function()
     statusBar.Text = "正在对比..."
-    compareSnapshot()
+    compareData()
     statusBar.Text = "对比完成"
 end, Color3.fromRGB(180, 50, 100))
 
@@ -225,4 +259,4 @@ addToggle("移动加速", "Speed")
 addToggle("高跳", "Jump")
 addToggle("穿墙 (Noclip)", "Noclip")
 
-print("[Ninja Panel v15] 内存版加载")
+print("[Ninja Panel v16] 终极版已加载")
