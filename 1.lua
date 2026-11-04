@@ -1,5 +1,5 @@
 -- ============================================
--- Ninja Panel v35 (Hitbox 放大 · 碰撞箱杀戮)
+-- Ninja Panel v37 (武器网络打击 · 原地秒杀)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -11,7 +11,7 @@ local CFG = {
     ESP = false, ESPHealth = false, ESPRole = false,
     Speed = false, SpeedVal = 18, 
     FakeSpeed = false,
-    HitboxAura = false, HitboxSize = 20, AutoSwing = false,
+    Aura = false, AuraRange = 30, AutoSwing = false,
     Scale = 1.0,
 }
 local CN_ROLE_MAP = { ["Chef"]="厨师",["Civilian"]="平民",["Delivery"]="快递员",["Farmer"]="农夫",["Fire"]="消防员",["Medical"]="医生",["Police"]="警察",["Prisoner"]="囚犯",["Road Service"]="路政",["Transit"]="公交司机" }
@@ -38,7 +38,7 @@ icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = fa
 local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v35 (Hitbox杀戮)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
+title.BorderSizePixel = 0; title.Text = "Ninja v37 (网络打击)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
 local function mkTitleBtn(text, xoff, cb)
@@ -57,7 +57,7 @@ scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; scroll.Parent = main
 local layout = Instance.new("UIListLayout"); layout.Padding = UDim.new(0, 6); layout.SortOrder = Enum.SortOrder.LayoutOrder; layout.Parent = scroll
 
 local statusBar = Instance.new("TextLabel"); statusBar.Size = UDim2.new(1, -12, 0, 36); statusBar.Position = UDim2.new(0, 6, 1, -42)
-statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "运行正常"
+statusBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40); statusBar.BorderSizePixel = 0; statusBar.Text = "拿着武器点击下方扫描"
 statusBar.TextColor3 = Color3.fromRGB(0, 255, 150); statusBar.Font = Enum.Font.GothamBold; statusBar.TextSize = 12
 statusBar.Parent = main; Instance.new("UICorner", statusBar).CornerRadius = UDim.new(0, 6)
 
@@ -76,68 +76,84 @@ local function addToggle(name, key)
 end
 
 -- ==========================================
--- 核心：碰撞箱放大杀戮
+-- 核心：武器 Remote 扫描与轰炸
 -- ==========================================
-local originalSizes = {}
+local currentWeaponRemotes = {}
+
+local function scanWeapon()
+    currentWeaponRemotes = {}
+    local char = LP.Character
+    if not char then statusBar.Text = "找不到角色" return end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool then statusBar.Text = "请先手持武器！" return end
+    
+    local count = 0
+    for _, obj in ipairs(tool:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            table.insert(currentWeaponRemotes, obj)
+            count = count + 1
+        end
+    end
+    
+    if count > 0 then
+        statusBar.Text = "✔ 成功提取武器网络事件 " .. count .. " 个"
+    else
+        statusBar.Text = "武器内没有 Remote，可能是纯服务端判定"
+    end
+end
 
 task.spawn(function()
-    while task.wait(0.2) do -- 不用每帧，每 0.2 秒强制覆盖一次即可，防卡
-        if CFG.HitboxAura then
+    while task.wait(0.15) do -- 稍微降频，防止服务器踢人
+        if CFG.Aura then
+            local myChar = LP.Character
+            if not myChar then continue end
+            local myHRP = myChar:FindFirstChild("HumanoidRootPart")
+            local tool = myChar:FindFirstChildOfClass("Tool")
+            if not myHRP or not tool then continue end
+            
             for _, plr in ipairs(Players:GetPlayers()) do
                 if plr ~= LP and plr.Character then
-                    local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-                    local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-                    if hrp and hum and hum.Health > 0 then
-                        -- 记录原始大小并放大
-                        if not originalSizes[hrp] then
-                            originalSizes[hrp] = hrp.Size
-                        end
-                        hrp.Size = Vector3.new(CFG.HitboxSize, CFG.HitboxSize, CFG.HitboxSize)
-                        hrp.Transparency = 0.5 -- 半透明，方便你看到他的判定框变大了
-                        hrp.CanCollide = false -- 防止把你弹飞
-                        
-                        -- 视觉提示框
-                        if not hrp:FindFirstChild("AuraBox") then
-                            local box = Instance.new("SelectionBox", hrp)
-                            box.Name = "AuraBox"
-                            box.Adornee = hrp
-                            box.Color3 = Color3.fromRGB(255, 0, 0)
+                    local tgtHRP = plr.Character:FindFirstChild("HumanoidRootPart")
+                    local tgtHum = plr.Character:FindFirstChildOfClass("Humanoid")
+                    
+                    if tgtHRP and tgtHum and tgtHum.Health > 0 then
+                        local dist = (myHRP.Position - tgtHRP.Position).Magnitude
+                        if dist <= CFG.AuraRange then
+                            -- 1. 自动挥刀动画
+                            if CFG.AutoSwing then
+                                pcall(function() tool:Activate() end)
+                            end
+                            
+                            -- 2. 疯狂向武器内的所有网络事件发送目标
+                            for _, remote in ipairs(currentWeaponRemotes) do
+                                if remote:IsA("RemoteEvent") then
+                                    -- 不同的游戏参数不同，我们暴力尝试传 Humanoid 或 Character
+                                    pcall(function() remote:FireServer(tgtHum) end)
+                                    pcall(function() remote:FireServer(plr.Character) end)
+                                    pcall(function() remote:FireServer("Hit", tgtHum) end)
+                                    pcall(function() remote:FireServer(tgtHRP.Position) end)
+                                elseif remote:IsA("RemoteFunction") then
+                                    pcall(function() remote:InvokeServer(tgtHum) end)
+                                end
+                            end
+                            
+                            -- 3. 强制触碰兜底
+                            if firetouchinterest and tool:FindFirstChild("Handle") then
+                                pcall(function()
+                                    firetouchinterest(tool.Handle, tgtHRP, 0)
+                                    firetouchinterest(tool.Handle, tgtHRP, 1)
+                                end)
+                            end
                         end
                     end
                 end
             end
-        else
-            -- 关闭时恢复
-            for hrp, size in pairs(originalSizes) do
-                if hrp and hrp.Parent then
-                    hrp.Size = size
-                    hrp.Transparency = 0
-                    local box = hrp:FindFirstChild("AuraBox")
-                    if box then box:Destroy() end
-                end
-            end
-            originalSizes = {}
-        end
-    end
-end)
-
--- 自动挥刀
-task.spawn(function()
-    while task.wait(0.1) do
-        if CFG.AutoSwing and CFG.HitboxAura then
-            local char = LP.Character
-            if char then
-                local tool = char:FindFirstChildOfClass("Tool")
-                if tool then
-                    pcall(function() tool:Activate() end)
-                end
-            end
         end
     end
 end)
 
 -- ==========================================
--- 速度与防检测逻辑 (保留你要求的18)
+-- 速度与防检测逻辑 (18速度)
 -- ==========================================
 local oldIndex
 local function setupFakeSpeed()
@@ -146,10 +162,6 @@ local function setupFakeSpeed()
         oldIndex = hookmetamethod(game, "__index", function(t, k)
             if CFG.FakeSpeed and not checkcaller() then
                 if k == "WalkSpeed" and t:IsA("Humanoid") then return 16 end
-                if k == "Velocity" and t:IsA("BasePart") and t.Name == "HumanoidRootPart" then
-                    local v = oldIndex(t, k)
-                    if v.Magnitude > 0 then return v.Unit * 16 end
-                end
             end
             return oldIndex(t, k)
         end)
@@ -166,7 +178,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ==========================================
--- ESP 渲染 (原样保留)
+-- ESP 渲染
 -- ==========================================
 local function getRoleLabel(plr)
     if plr.Team then
@@ -219,17 +231,18 @@ addToggle("透视 玩家名字", "ESP")
 addToggle("透视 血条比例", "ESPHealth")
 addToggle("透视 中文职业", "ESPRole")
 
-local lbl1 = Instance.new("TextLabel"); lbl1.Size = UDim2.new(1, -6, 0, 22); lbl1.BackgroundTransparency = 1; lbl1.Text = "── 物理 Hitbox 杀戮 ──"
+local lbl1 = Instance.new("TextLabel"); lbl1.Size = UDim2.new(1, -6, 0, 22); lbl1.BackgroundTransparency = 1; lbl1.Text = "── 原地网络杀戮 ──"
 lbl1.TextColor3 = Color3.fromRGB(160, 160, 180); lbl1.Font = Enum.Font.GothamBold; lbl1.TextSize = 13; lbl1.TextXAlignment = Enum.TextXAlignment.Left; lbl1.Parent = scroll
 
-addToggle("开启 Hitbox 放大", "HitboxAura")
-addToggle("自动挥刀 (需手持武器)", "AutoSwing")
+addButton("1. 扫描手里武器的网络包", scanWeapon, Color3.fromRGB(50, 150, 200))
+addToggle("2. 开启原地疯狂打击", "Aura")
+addToggle("3. 自动挥刀动作", "AutoSwing")
 
-local sizeBtn
-sizeBtn = addButton("碰撞箱大小: " .. CFG.HitboxSize, function()
-    CFG.HitboxSize = CFG.HitboxSize + 10
-    if CFG.HitboxSize > 60 then CFG.HitboxSize = 10 end
-    sizeBtn.Text = "碰撞箱大小: " .. CFG.HitboxSize
+local rangeBtn
+rangeBtn = addButton("打击范围: " .. CFG.AuraRange .. " 米", function()
+    CFG.AuraRange = CFG.AuraRange + 10
+    if CFG.AuraRange > 100 then CFG.AuraRange = 10 end
+    rangeBtn.Text = "打击范围: " .. CFG.AuraRange .. " 米"
 end, Color3.fromRGB(120, 80, 80))
 
 local lbl2 = Instance.new("TextLabel"); lbl2.Size = UDim2.new(1, -6, 0, 22); lbl2.BackgroundTransparency = 1; lbl2.Text = "── 速度突破 ──"
@@ -238,4 +251,4 @@ lbl2.TextColor3 = Color3.fromRGB(160, 160, 180); lbl2.Font = Enum.Font.GothamBol
 addToggle("强制奔跑 (速度 18)", "Speed")
 addToggle("开启速度欺骗 (免耗耐力)", "FakeSpeed")
 
-print("[Ninja Panel v35] Hitbox杀戮版已加载")
+print("[Ninja Panel v37] 网络打击版已加载")
