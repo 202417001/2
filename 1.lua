@@ -1,5 +1,5 @@
 -- ============================================
--- Ninja Panel v34 (原地杀戮 · 范围可调 · 伤害翻倍)
+-- Ninja Panel v35 (Hitbox 放大 · 碰撞箱杀戮)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -11,7 +11,7 @@ local CFG = {
     ESP = false, ESPHealth = false, ESPRole = false,
     Speed = false, SpeedVal = 18, 
     FakeSpeed = false,
-    KillAura = false, KillRange = 50, DamageMult = 1,
+    HitboxAura = false, HitboxSize = 20, AutoSwing = false,
     Scale = 1.0,
 }
 local CN_ROLE_MAP = { ["Chef"]="厨师",["Civilian"]="平民",["Delivery"]="快递员",["Farmer"]="农夫",["Fire"]="消防员",["Medical"]="医生",["Police"]="警察",["Prisoner"]="囚犯",["Road Service"]="路政",["Transit"]="公交司机" }
@@ -38,7 +38,7 @@ icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = fa
 local function minimize() main.Visible = false; icon.Visible = true end
 
 local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 32); title.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-title.BorderSizePixel = 0; title.Text = "Ninja v34 (杀戮版)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
+title.BorderSizePixel = 0; title.Text = "Ninja v35 (Hitbox杀戮)"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 16; title.Parent = main
 Instance.new("UICorner", title).CornerRadius = UDim.new(0, 8)
 
 local function mkTitleBtn(text, xoff, cb)
@@ -76,65 +76,60 @@ local function addToggle(name, key)
 end
 
 -- ==========================================
--- 暴力杀戮核心
+-- 核心：碰撞箱放大杀戮
 -- ==========================================
-local function getTargetPlayers()
-    local targets = {}
-    local myChar = LP.Character
-    if not myChar then return targets end
-    local myHRP = myChar:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return targets end
-    
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LP and plr.Character then
-            local tgtHRP = plr.Character:FindFirstChild("HumanoidRootPart")
-            local tgtHum = plr.Character:FindFirstChildOfClass("Humanoid")
-            if tgtHRP and tgtHum and tgtHum.Health > 0 then
-                local dist = (myHRP.Position - tgtHRP.Position).Magnitude
-                if dist <= CFG.KillRange then
-                    table.insert(targets, {plr = plr, char = plr.Character, hrp = tgtHRP, hum = tgtHum})
+local originalSizes = {}
+
+task.spawn(function()
+    while task.wait(0.2) do -- 不用每帧，每 0.2 秒强制覆盖一次即可，防卡
+        if CFG.HitboxAura then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= LP and plr.Character then
+                    local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                    local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+                    if hrp and hum and hum.Health > 0 then
+                        -- 记录原始大小并放大
+                        if not originalSizes[hrp] then
+                            originalSizes[hrp] = hrp.Size
+                        end
+                        hrp.Size = Vector3.new(CFG.HitboxSize, CFG.HitboxSize, CFG.HitboxSize)
+                        hrp.Transparency = 0.5 -- 半透明，方便你看到他的判定框变大了
+                        hrp.CanCollide = false -- 防止把你弹飞
+                        
+                        -- 视觉提示框
+                        if not hrp:FindFirstChild("AuraBox") then
+                            local box = Instance.new("SelectionBox", hrp)
+                            box.Name = "AuraBox"
+                            box.Adornee = hrp
+                            box.Color3 = Color3.fromRGB(255, 0, 0)
+                        end
+                    end
                 end
             end
+        else
+            -- 关闭时恢复
+            for hrp, size in pairs(originalSizes) do
+                if hrp and hrp.Parent then
+                    hrp.Size = size
+                    hrp.Transparency = 0
+                    local box = hrp:FindFirstChild("AuraBox")
+                    if box then box:Destroy() end
+                end
+            end
+            originalSizes = {}
         end
     end
-    return targets
-end
+end)
 
--- 暴力循环：0.1秒执行一次，防止卡死
+-- 自动挥刀
 task.spawn(function()
     while task.wait(0.1) do
-        if CFG.KillAura then
+        if CFG.AutoSwing and CFG.HitboxAura then
             local char = LP.Character
-            if not char then continue end
-            local tool = char:FindFirstChildOfClass("Tool")
-            local targets = getTargetPlayers()
-            
-            if #targets > 0 then
-                -- 1. 如果有武器，疯狂触发
+            if char then
+                local tool = char:FindFirstChildOfClass("Tool")
                 if tool then
                     pcall(function() tool:Activate() end)
-                    
-                    -- 强行改伤害数值 (如果有的话)
-                    for _, obj in ipairs(tool:GetDescendants()) do
-                        if (obj:IsA("NumberValue") or obj:IsA("IntValue")) and obj.Name:lower():find("damage") then
-                            pcall(function() obj.Value = obj.Value * CFG.DamageMult end)
-                        end
-                    end
-                    
-                    -- 强制将武器触碰目标
-                    local handle = tool:FindFirstChild("Handle")
-                    if handle and firetouchinterest then
-                        for _, t in ipairs(targets) do
-                            for _, part in ipairs(t.char:GetChildren()) do
-                                if part:IsA("BasePart") then
-                                    pcall(function()
-                                        firetouchinterest(handle, part, 0)
-                                        firetouchinterest(handle, part, 1)
-                                    end)
-                                end
-                            end
-                        end
-                    end
                 end
             end
         end
@@ -142,7 +137,7 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- 速度与防检测逻辑
+-- 速度与防检测逻辑 (保留你要求的18)
 -- ==========================================
 local oldIndex
 local function setupFakeSpeed()
@@ -171,7 +166,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ==========================================
--- ESP 与 UI 构建
+-- ESP 渲染 (原样保留)
 -- ==========================================
 local function getRoleLabel(plr)
     if plr.Team then
@@ -218,31 +213,23 @@ RunService.RenderStepped:Connect(function()
 end)
 
 -- ==========================================
--- UI 按钮添加
+-- UI 按钮构建
 -- ==========================================
 addToggle("透视 玩家名字", "ESP")
 addToggle("透视 血条比例", "ESPHealth")
 addToggle("透视 中文职业", "ESPRole")
 
-local lbl1 = Instance.new("TextLabel"); lbl1.Size = UDim2.new(1, -6, 0, 22); lbl1.BackgroundTransparency = 1; lbl1.Text = "── 杀戮 (需手持武器) ──"
+local lbl1 = Instance.new("TextLabel"); lbl1.Size = UDim2.new(1, -6, 0, 22); lbl1.BackgroundTransparency = 1; lbl1.Text = "── 物理 Hitbox 杀戮 ──"
 lbl1.TextColor3 = Color3.fromRGB(160, 160, 180); lbl1.Font = Enum.Font.GothamBold; lbl1.TextSize = 13; lbl1.TextXAlignment = Enum.TextXAlignment.Left; lbl1.Parent = scroll
 
-addToggle("开启原地杀戮 (Aura)", "KillAura")
+addToggle("开启 Hitbox 放大", "HitboxAura")
+addToggle("自动挥刀 (需手持武器)", "AutoSwing")
 
--- 范围调整
-local rangeBtn
-rangeBtn = addButton("攻击范围: " .. CFG.KillRange .. " 米", function()
-    CFG.KillRange = CFG.KillRange + 10
-    if CFG.KillRange > 150 then CFG.KillRange = 10 end
-    rangeBtn.Text = "攻击范围: " .. CFG.KillRange .. " 米"
-end, Color3.fromRGB(80, 80, 120))
-
--- 伤害倍数调整
-local dmgBtn
-dmgBtn = addButton("伤害倍数: " .. CFG.DamageMult .. "x", function()
-    CFG.DamageMult = CFG.DamageMult + 1
-    if CFG.DamageMult > 10 then CFG.DamageMult = 1 end
-    dmgBtn.Text = "伤害倍数: " .. CFG.DamageMult .. "x"
+local sizeBtn
+sizeBtn = addButton("碰撞箱大小: " .. CFG.HitboxSize, function()
+    CFG.HitboxSize = CFG.HitboxSize + 10
+    if CFG.HitboxSize > 60 then CFG.HitboxSize = 10 end
+    sizeBtn.Text = "碰撞箱大小: " .. CFG.HitboxSize
 end, Color3.fromRGB(120, 80, 80))
 
 local lbl2 = Instance.new("TextLabel"); lbl2.Size = UDim2.new(1, -6, 0, 22); lbl2.BackgroundTransparency = 1; lbl2.Text = "── 速度突破 ──"
@@ -251,4 +238,4 @@ lbl2.TextColor3 = Color3.fromRGB(160, 160, 180); lbl2.Font = Enum.Font.GothamBol
 addToggle("强制奔跑 (速度 18)", "Speed")
 addToggle("开启速度欺骗 (免耗耐力)", "FakeSpeed")
 
-print("[Ninja Panel v34] 杀戮版已加载")
+print("[Ninja Panel v35] Hitbox杀戮版已加载")
