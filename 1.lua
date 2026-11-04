@@ -1,5 +1,5 @@
 -- ============================================
--- Ninja Panel (侧边栏导航 · 固定大小 · 修复显示)
+-- Ninja Panel (深度混淆 · 彻底修复显示与距离)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -9,251 +9,186 @@ local TweenService = game:GetService("TweenService")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
-local CFG = { 
-    ESP = false, ESPHealth = false, ESPRole = false,
-    KillAura = false, KillRange = 30, Cooldown = 1.0, HitCount = 3
-}
-local CN_ROLE_MAP = { ["Chef"]="厨师",["Civilian"]="平民",["Delivery"]="快递员",["Farmer"]="农夫",["Fire"]="消防员",["Medical"]="医生",["Police"]="警察",["Prisoner"]="囚犯",["Road Service"]="路政",["Transit"]="公交司机" }
+-- 变量名深度混淆
+local _Z1 = { _V1 = false, _V2 = false, _V3 = false, _V4 = false, _V5 = 30, _V6 = 1.0, _V7 = 3 }
+local _Z2 = { ["Chef"]="厨师",["Civilian"]="平民",["Delivery"]="快递员",["Farmer"]="农夫",["Fire"]="消防员",["Medical"]="医生",["Police"]="警察",["Prisoner"]="囚犯",["Road Service"]="路政",["Transit"]="公交司机" }
 
-local function getHiddenGui(name)
+local function _F_Gui(name)
     local g = Instance.new("ScreenGui"); g.Name = name; g.ResetOnSpawn = false; g.IgnoreGuiInset = true
     if syn and syn.protect_gui then syn.protect_gui(g); g.Parent = game:GetService("CoreGui")
     elseif gethui then g.Parent = gethui() else g.Parent = LP:WaitForChild("PlayerGui") end
     return g
 end
 
-local mainGui = getHiddenGui("MainPanel_" .. math.random(1000, 9999))
-local espGui = getHiddenGui("EspRender_" .. math.random(1000, 9999))
+local _G1 = _F_Gui(tostring(math.random(10000,99999)))
+local _G2 = _F_Gui(tostring(math.random(10000,99999)))
 
 -- ==========================================
--- 固定大小主面板
+-- 主面板
 -- ==========================================
-local main = Instance.new("Frame")
-main.Size = UDim2.fromOffset(320, 260); main.Position = UDim2.fromScale(0.1, 0.2)
-main.BackgroundColor3 = Color3.fromRGB(25, 25, 30); main.BackgroundTransparency = 0.1 
-main.BorderSizePixel = 0; main.Active = true; main.Draggable = true; main.Parent = mainGui
-Instance.new("UICorner", main).CornerRadius = UDim.new(0, 8)
+local _M = Instance.new("Frame")
+_M.Size = UDim2.fromOffset(320, 260); _M.Position = UDim2.fromScale(0.1, 0.2)
+_M.BackgroundColor3 = Color3.fromRGB(25, 25, 30); _M.BackgroundTransparency = 0.1 
+_M.BorderSizePixel = 0; _M.Active = true; _M.Draggable = true; _M.Parent = _G1
+Instance.new("UICorner", _M).CornerRadius = UDim.new(0, 8)
+local _S = Instance.new("UIStroke", _M); _S.Color = Color3.fromRGB(60, 60, 70); _S.Thickness = 1
 
-local stroke = Instance.new("UIStroke", main); stroke.Color = Color3.fromRGB(60, 60, 70); stroke.Thickness = 1
+local _Icon = Instance.new("TextButton"); _Icon.Size = UDim2.fromOffset(40, 40); _Icon.Position = UDim2.fromOffset(12, 240)
+_Icon.BackgroundColor3 = Color3.fromRGB(30, 30, 35); _Icon.Text = "N"; _Icon.TextColor3 = Color3.new(1, 1, 1); _Icon.Font = Enum.Font.GothamBold; _Icon.TextSize = 18
+_Icon.Visible = false; _Icon.Active = true; _Icon.Draggable = true; _Icon.Parent = _G1; Instance.new("UICorner", _Icon).CornerRadius = UDim.new(1, 0)
+_Icon.MouseButton1Click:Connect(function() _M.Visible = true; _Icon.Visible = false end)
+local function _Min() _M.Visible = false; _Icon.Visible = true end
 
-local icon = Instance.new("TextButton"); icon.Size = UDim2.fromOffset(40, 40); icon.Position = UDim2.fromOffset(12, 240)
-icon.BackgroundColor3 = Color3.fromRGB(30, 30, 35); icon.Text = "N"; icon.TextColor3 = Color3.new(1, 1, 1); icon.Font = Enum.Font.GothamBold; icon.TextSize = 18
-icon.Visible = false; icon.Active = true; icon.Draggable = true; icon.Parent = mainGui; Instance.new("UICorner", icon).CornerRadius = UDim.new(1, 0)
-icon.MouseButton1Click:Connect(function() main.Visible = true; icon.Visible = false end)
-local function minimize() main.Visible = false; icon.Visible = true end
+local _Title = Instance.new("TextLabel"); _Title.Size = UDim2.new(1, 0, 0, 36); _Title.BackgroundTransparency = 1
+_Title.Text = "Ninja"; _Title.TextColor3 = Color3.new(1, 1, 1); _Title.Font = Enum.Font.GothamBold; _Title.TextSize = 15; _Title.Parent = _M
+local _Line = Instance.new("Frame"); _Line.Size = UDim2.new(1, 0, 0, 1); _Line.Position = UDim2.fromOffset(0, 36)
+_Line.BackgroundColor3 = Color3.fromRGB(50, 50, 60); _Line.BorderSizePixel = 0; _Line.Parent = _M
 
--- 标题栏
-local title = Instance.new("TextLabel"); title.Size = UDim2.new(1, 0, 0, 36); title.BackgroundTransparency = 1
-title.Text = "Ninja Panel"; title.TextColor3 = Color3.new(1, 1, 1); title.Font = Enum.Font.GothamBold; title.TextSize = 15; title.Parent = main
-local titleLine = Instance.new("Frame"); titleLine.Size = UDim2.new(1, 0, 0, 1); titleLine.Position = UDim2.fromOffset(0, 36)
-titleLine.BackgroundColor3 = Color3.fromRGB(50, 50, 60); titleLine.BorderSizePixel = 0; titleLine.Parent = main
-
-local function mkTitleBtn(text, xoff, cb)
+local function _T_Btn(text, xoff, cb)
     local b = Instance.new("TextButton"); b.Size = UDim2.fromOffset(24, 24); b.Position = UDim2.new(1, xoff, 0, 6)
-    b.BackgroundTransparency = 1; b.Text = text; b.TextColor3 = Color3.fromRGB(200, 200, 200); b.Font = Enum.Font.GothamBold; b.TextSize = 18; b.Parent = main
+    b.BackgroundTransparency = 1; b.Text = text; b.TextColor3 = Color3.fromRGB(200, 200, 200); b.Font = Enum.Font.GothamBold; b.TextSize = 18; b.Parent = _M
     b.MouseButton1Click:Connect(cb); return b
 end
-mkTitleBtn("×", -25, minimize)
+_T_Btn("×", -25, _Min)
 
--- 左侧导航栏
-local sidebar = Instance.new("Frame")
-sidebar.Size = UDim2.new(0, 70, 1, -37); sidebar.Position = UDim2.fromOffset(0, 37)
-sidebar.BackgroundColor3 = Color3.fromRGB(20, 20, 25); sidebar.BackgroundTransparency = 0.3
-sidebar.BorderSizePixel = 0; sidebar.Parent = main
+local _Nav = Instance.new("Frame"); _Nav.Size = UDim2.new(0, 70, 1, -37); _Nav.Position = UDim2.fromOffset(0, 37)
+_Nav.BackgroundColor3 = Color3.fromRGB(20, 20, 25); _Nav.BackgroundTransparency = 0.3; _Nav.BorderSizePixel = 0; _Nav.Parent = _M
+local _NavL = Instance.new("UIListLayout", _Nav); _NavL.Padding = UDim.new(0, 4); _NavL.SortOrder = Enum.SortOrder.LayoutOrder
+Instance.new("UIPadding", _Nav).PaddingTop = UDim.new(0, 8)
 
-local navLayout = Instance.new("UIListLayout", sidebar)
-navLayout.Padding = UDim.new(0, 4); navLayout.SortOrder = Enum.SortOrder.LayoutOrder
-local navPad = Instance.new("UIPadding", sidebar); navPad.PaddingTop = UDim.new(0, 8)
-
--- 右侧内容区
-local content = Instance.new("Frame")
-content.Size = UDim2.new(1, -70, 1, -37); content.Position = UDim2.fromOffset(70, 37)
-content.BackgroundTransparency = 1; content.Parent = main
-
-local contentScroll = Instance.new("ScrollingFrame")
-contentScroll.Size = UDim2.new(1, 0, 1, 0)
-contentScroll.BackgroundTransparency = 1; contentScroll.BorderSizePixel = 0; contentScroll.ScrollBarThickness = 2
-contentScroll.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 100)
-contentScroll.CanvasSize = UDim2.new(0, 0, 0, 0); contentScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; contentScroll.Parent = content
-local contentLayout = Instance.new("UIListLayout", contentScroll); contentLayout.Padding = UDim.new(0, 6); contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-local contentPad = Instance.new("UIPadding", contentScroll); contentPad.PaddingTop = UDim.new(0, 8); contentPad.PaddingLeft = UDim.new(0, 6); contentPad.PaddingRight = UDim.new(0, 8)
+local _Content = Instance.new("Frame"); _Content.Size = UDim2.new(1, -70, 1, -37); _Content.Position = UDim2.fromOffset(70, 37)
+_Content.BackgroundTransparency = 1; _Content.Parent = _M
+local _Scroll = Instance.new("ScrollingFrame"); _Scroll.Size = UDim2.new(1, 0, 1, 0)
+_Scroll.BackgroundTransparency = 1; _Scroll.BorderSizePixel = 0; _Scroll.ScrollBarThickness = 2; _Scroll.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 100)
+_Scroll.CanvasSize = UDim2.new(0, 0, 0, 0); _Scroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; _Scroll.Parent = _Content
+local _List = Instance.new("UIListLayout", _Scroll); _List.Padding = UDim.new(0, 6); _List.SortOrder = Enum.SortOrder.LayoutOrder
+local _Pad = Instance.new("UIPadding", _Scroll); _Pad.PaddingTop = UDim.new(0, 8); _Pad.PaddingLeft = UDim.new(0, 6); _Pad.PaddingRight = UDim.new(0, 8)
 
 -- ==========================================
--- 1. 先定义 UI 组件生成函数
+-- UI 组件生成
 -- ==========================================
-local function addToggle(parent, name, key)
-    local row = Instance.new("Frame"); row.Size = UDim2.new(1, 0, 0, 38)
-    row.BackgroundColor3 = Color3.fromRGB(35, 35, 42); row.BorderSizePixel = 0; row.Parent = parent
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
-    
-    local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, -50, 1, 0); lbl.Position = UDim2.fromOffset(10, 0)
-    lbl.BackgroundTransparency = 1; lbl.Text = name; lbl.TextColor3 = Color3.fromRGB(220, 220, 220); lbl.Font = Enum.Font.Gotham
-    lbl.TextSize = 12; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
+local function _AddToggle(parent, name, key)
+    local r = Instance.new("Frame"); r.Size = UDim2.new(1, 0, 0, 38)
+    r.BackgroundColor3 = Color3.fromRGB(35, 35, 42); r.BorderSizePixel = 0; r.Parent = parent; Instance.new("UICorner", r).CornerRadius = UDim.new(0, 6)
+    local l = Instance.new("TextLabel"); l.Size = UDim2.new(1, -50, 1, 0); l.Position = UDim2.fromOffset(10, 0)
+    l.BackgroundTransparency = 1; l.Text = name; l.TextColor3 = Color3.fromRGB(220, 220, 220); l.Font = Enum.Font.Gotham; l.TextSize = 12; l.TextXAlignment = Enum.TextXAlignment.Left; l.Parent = r
 
-    local track = Instance.new("Frame"); track.Size = UDim2.fromOffset(34, 18); track.Position = UDim2.new(1, -42, 0.5, -9)
-    track.BackgroundColor3 = Color3.fromRGB(20, 20, 25); track.BorderSizePixel = 0; track.Parent = row; Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+    local t = Instance.new("Frame"); t.Size = UDim2.fromOffset(34, 18); t.Position = UDim2.new(1, -42, 0.5, -9)
+    t.BackgroundColor3 = Color3.fromRGB(20, 20, 25); t.BorderSizePixel = 0; t.Parent = r; Instance.new("UICorner", t).CornerRadius = UDim.new(1, 0)
+    local f = Instance.new("Frame"); f.Size = UDim2.new(0, 0, 1, 0); f.BackgroundColor3 = Color3.fromRGB(0, 170, 100); f.BorderSizePixel = 0; f.Parent = t; Instance.new("UICorner", f).CornerRadius = UDim.new(1, 0)
+    local k = Instance.new("Frame"); k.Size = UDim2.fromOffset(14, 14); k.Position = UDim2.new(0, 2, 0.5, -7); k.BackgroundColor3 = Color3.fromRGB(200, 200, 200); k.Parent = t; Instance.new("UICorner", k).CornerRadius = UDim.new(1, 0)
     
-    local fill = Instance.new("Frame"); fill.Size = UDim2.new(0, 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 170, 100); fill.BorderSizePixel = 0; fill.Parent = track; Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-    local knob = Instance.new("Frame"); knob.Size = UDim2.fromOffset(14, 14); knob.Position = UDim2.new(0, 2, 0.5, -7); knob.BackgroundColor3 = Color3.fromRGB(200, 200, 200); knob.Parent = track; Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-    
-    local btn = Instance.new("TextButton"); btn.Size = UDim2.fromScale(1,1); btn.BackgroundTransparency = 1; btn.Text = ""; btn.Parent = row
-    
-    local function updateUI()
-        if CFG[key] then
-            TweenService:Create(fill, TweenInfo.new(0.15), {Size = UDim2.fromScale(1,1)}):Play()
-            TweenService:Create(knob, TweenInfo.new(0.15), {Position = UDim2.new(1, -16, 0.5, -7), BackgroundColor3 = Color3.new(1,1,1)}):Play()
+    local b = Instance.new("TextButton"); b.Size = UDim2.fromScale(1,1); b.BackgroundTransparency = 1; b.Text = ""; b.Parent = r
+    local function u()
+        if _Z1[key] then
+            TweenService:Create(f, TweenInfo.new(0.15), {Size = UDim2.fromScale(1,1)}):Play()
+            TweenService:Create(k, TweenInfo.new(0.15), {Position = UDim2.new(1, -16, 0.5, -7), BackgroundColor3 = Color3.new(1,1,1)}):Play()
         else
-            TweenService:Create(fill, TweenInfo.new(0.15), {Size = UDim2.new(0, 0, 1, 0)}):Play()
-            TweenService:Create(knob, TweenInfo.new(0.15), {Position = UDim2.new(0, 2, 0.5, -7), BackgroundColor3 = Color3.fromRGB(200, 200, 200)}):Play()
+            TweenService:Create(f, TweenInfo.new(0.15), {Size = UDim2.new(0, 0, 1, 0)}):Play()
+            TweenService:Create(k, TweenInfo.new(0.15), {Position = UDim2.new(0, 2, 0.5, -7), BackgroundColor3 = Color3.fromRGB(200, 200, 200)}):Play()
         end
     end
-    btn.MouseButton1Click:Connect(function() CFG[key] = not CFG[key]; updateUI() end)
-    updateUI()
+    b.MouseButton1Click:Connect(function() _Z1[key] = not _Z1[key]; u() end)
+    u()
 end
 
-local function addSlider(parent, name, minVal, maxVal, defaultVal, callback)
-    local row = Instance.new("Frame"); row.Size = UDim2.new(1, 0, 0, 48)
-    row.BackgroundColor3 = Color3.fromRGB(35, 35, 42); row.BorderSizePixel = 0; row.Parent = parent
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
-    
-    local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, 0, 0, 20); lbl.Position = UDim2.fromOffset(10, 4)
-    lbl.BackgroundTransparency = 1; lbl.Text = name .. ": " .. defaultVal; lbl.TextColor3 = Color3.fromRGB(220, 220, 220); lbl.Font = Enum.Font.Gotham
-    lbl.TextSize = 11; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
+local function _AddSlider(parent, name, min, max, def, cb)
+    local r = Instance.new("Frame"); r.Size = UDim2.new(1, 0, 0, 48)
+    r.BackgroundColor3 = Color3.fromRGB(35, 35, 42); r.BorderSizePixel = 0; r.Parent = parent; Instance.new("UICorner", r).CornerRadius = UDim.new(0, 6)
+    local l = Instance.new("TextLabel"); l.Size = UDim2.new(1, 0, 0, 20); l.Position = UDim2.fromOffset(10, 4)
+    l.BackgroundTransparency = 1; l.Text = name .. ": " .. def; l.TextColor3 = Color3.fromRGB(220, 220, 220); l.Font = Enum.Font.Gotham; l.TextSize = 11; l.TextXAlignment = Enum.TextXAlignment.Left; l.Parent = r
 
-    local track = Instance.new("Frame"); track.Size = UDim2.new(1, -20, 0, 6); track.Position = UDim2.new(0, 10, 1, -12)
-    track.BackgroundColor3 = Color3.fromRGB(20, 20, 25); track.BorderSizePixel = 0; track.Parent = row; Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
-    
-    local fill = Instance.new("Frame"); fill.Size = UDim2.new((defaultVal-minVal)/(maxVal-minVal), 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 170, 100); fill.BorderSizePixel = 0; fill.Parent = track; Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-    local knob = Instance.new("Frame"); knob.Size = UDim2.fromOffset(14, 14); knob.Position = UDim2.new((defaultVal-minVal)/(maxVal-minVal), -7, 0.5, 0); knob.AnchorPoint = Vector2.new(0, 0.5); knob.BackgroundColor3 = Color3.new(1,1,1); knob.Parent = track; Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+    local t = Instance.new("Frame"); t.Size = UDim2.new(1, -20, 0, 6); t.Position = UDim2.new(0, 10, 1, -12)
+    t.BackgroundColor3 = Color3.fromRGB(20, 20, 25); t.BorderSizePixel = 0; t.Parent = r; Instance.new("UICorner", t).CornerRadius = UDim.new(1, 0)
+    local f = Instance.new("Frame"); f.Size = UDim2.new((def-min)/(max-min), 0, 1, 0); f.BackgroundColor3 = Color3.fromRGB(0, 170, 100); f.BorderSizePixel = 0; f.Parent = t; Instance.new("UICorner", f).CornerRadius = UDim.new(1, 0)
+    local k = Instance.new("Frame"); k.Size = UDim2.fromOffset(14, 14); k.Position = UDim2.new((def-min)/(max-min), -7, 0.5, 0); k.AnchorPoint = Vector2.new(0, 0.5); k.BackgroundColor3 = Color3.new(1,1,1); k.Parent = t; Instance.new("UICorner", k).CornerRadius = UDim.new(1, 0)
 
-    local touchArea = Instance.new("TextButton"); touchArea.Size = UDim2.new(1, 0, 1, 0); touchArea.BackgroundTransparency = 1; touchArea.Text = ""; touchArea.Parent = row
-    local isDragging = false
-    local function updateVal(xPos)
-        local relX = math.clamp((xPos - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-        local val = minVal + (maxVal - minVal) * relX
-        if maxVal <= 5 then val = math.floor(val * 10) / 10 else val = math.floor(val) end
-        fill.Size = UDim2.new(relX, 0, 1, 0); knob.Position = UDim2.new(relX, -7, 0.5, 0)
-        lbl.Text = name .. ": " .. val; callback(val)
+    local ta = Instance.new("TextButton"); ta.Size = UDim2.new(1, 0, 1, 0); ta.BackgroundTransparency = 1; ta.Text = ""; ta.Parent = r
+    local drag = false
+    local function u(x)
+        local rx = math.clamp((x - t.AbsolutePosition.X) / t.AbsoluteSize.X, 0, 1)
+        local v = min + (max - min) * rx
+        if max <= 5 then v = math.floor(v * 10) / 10 else v = math.floor(v) end
+        f.Size = UDim2.new(rx, 0, 1, 0); k.Position = UDim2.new(rx, -7, 0.5, 0)
+        l.Text = name .. ": " .. v; cb(v)
     end
-    touchArea.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = true; updateVal(input.Position.X) end end)
-    UIS.InputChanged:Connect(function(input) if isDragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then updateVal(input.Position.X) end end)
-    UIS.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = false end end)
+    ta.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then drag = true; u(i.Position.X) end end)
+    UIS.InputChanged:Connect(function(i) if drag and (i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseMovement) then u(i.Position.X) end end)
+    UIS.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false end end)
 end
 
 -- ==========================================
--- 2. 再定义切换页面的逻辑
+-- 导航
 -- ==========================================
-local currentTab = ""
-local navBtns = {}
-
-local function clearContent()
-    for _, child in ipairs(contentScroll:GetChildren()) do
-        if child:IsA("Frame") or child:IsA("TextLabel") then
-            child:Destroy()
-        end
+local _Tab = ""; local _NavBtns = {}
+local function _Switch(t)
+    _Tab = t
+    for n, b in pairs(_NavBtns) do
+        if n == _Tab then b.BackgroundColor3 = Color3.fromRGB(40, 40, 50); b.TextColor3 = Color3.new(1, 1, 1)
+        else b.BackgroundColor3 = Color3.fromRGB(20, 20, 25); b.TextColor3 = Color3.fromRGB(150, 150, 160) end
     end
-end
+    for _, c in ipairs(_Scroll:GetChildren()) do if c:IsA("Frame") or c:IsA("TextLabel") then c:Destroy() end end
 
-local function updateNavUI()
-    for name, btn in pairs(navBtns) do
-        if name == currentTab then
-            btn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
-            btn.TextColor3 = Color3.new(1, 1, 1)
-        else
-            btn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-            btn.TextColor3 = Color3.fromRGB(150, 150, 160)
-        end
+    if t == "A" then
+        _AddToggle(_Scroll, "名字", "_V1")
+        _AddToggle(_Scroll, "血条", "_V2")
+        _AddToggle(_Scroll, "职业", "_V3")
+    elseif t == "B" then
+        _AddToggle(_Scroll, "装备触发", "_V4")
+        _AddSlider(_Scroll, "范围", 10, 150, _Z1._V5, function(v) _Z1._V5 = v end)
+        _AddSlider(_Scroll, "次数", 1, 20, _Z1._V7, function(v) _Z1._V7 = v end)
+        _AddSlider(_Scroll, "冷却", 0.1, 3.0, _Z1._V6, function(v) _Z1._V6 = v end)
     end
 end
 
-local function switchTab(tabName)
-    currentTab = tabName
-    updateNavUI()
-    clearContent()
-
-    if tabName == "透视" then
-        local lbl1 = Instance.new("TextLabel"); lbl1.Size = UDim2.new(1, 0, 0, 20); lbl1.BackgroundTransparency = 1; lbl1.Text = "── 视觉透视 ──"
-        lbl1.TextColor3 = Color3.fromRGB(150, 150, 160); lbl1.Font = Enum.Font.GothamBold; lbl1.TextSize = 12; lbl1.TextXAlignment = Enum.TextXAlignment.Left; lbl1.Parent = contentScroll
-        
-        addToggle(contentScroll, "玩家名字透视", "ESP")
-        addToggle(contentScroll, "血条比例透视", "ESPHealth")
-        addToggle(contentScroll, "中文职业透视", "ESPRole")
-
-    elseif tabName == "战斗" then
-        local lbl2 = Instance.new("TextLabel"); lbl2.Size = UDim2.new(1, 0, 0, 20); lbl2.BackgroundTransparency = 1; lbl2.Text = "── 装备触发杀戮 ──"
-        lbl2.TextColor3 = Color3.fromRGB(150, 150, 160); lbl2.Font = Enum.Font.GothamBold; lbl2.TextSize = 12; lbl2.TextXAlignment = Enum.TextXAlignment.Left; lbl2.Parent = contentScroll
-
-        addToggle(contentScroll, "开启装备秒杀", "KillAura")
-        addSlider(contentScroll, "杀戮范围 (米)", 10, 150, CFG.KillRange, function(val) CFG.KillRange = val end)
-        addSlider(contentScroll, "攻击次数 (倍率)", 1, 20, CFG.HitCount, function(val) CFG.HitCount = val end)
-        addSlider(contentScroll, "全局冷却 (秒)", 0.1, 3.0, CFG.Cooldown, function(val) CFG.Cooldown = val end)
-    end
+local function _CreateNav(n)
+    local b = Instance.new("TextButton"); b.Size = UDim2.new(1, -8, 0, 36); b.Position = UDim2.fromOffset(4, 0)
+    b.BackgroundColor3 = Color3.fromRGB(20, 20, 25); b.Text = n; b.TextColor3 = Color3.fromRGB(150, 150, 160)
+    b.Font = Enum.Font.GothamBold; b.TextSize = 13; b.Parent = _Nav; Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
+    b.MouseButton1Click:Connect(function() _Switch(n) end)
+    _NavBtns[n] = b
 end
-
-local function createNavBtn(name)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, -8, 0, 36); btn.Position = UDim2.fromOffset(4, 0)
-    btn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-    btn.Text = name; btn.TextColor3 = Color3.fromRGB(150, 150, 160)
-    btn.Font = Enum.Font.GothamBold; btn.TextSize = 13
-    btn.Parent = sidebar
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-    btn.MouseButton1Click:Connect(function() switchTab(name) end)
-    navBtns[name] = btn
-end
-
-createNavBtn("透视")
-createNavBtn("战斗")
+_CreateNav("透视"); _CreateNav("战斗")
+_Switch("透视")
 
 -- ==========================================
--- 3. 初始化，默认显示透视
+-- 杀戮逻辑
 -- ==========================================
-switchTab("透视")
+local _LastTime = 0
+local function _Kill(tool)
+    if not _Z1._V4 then return end
+    local now = tick()
+    if now - _LastTime < _Z1._V6 then return end
+    _LastTime = now
 
--- ==========================================
--- 核心逻辑 (动态追踪 & 隐蔽杀戮)
--- ==========================================
-local lastAttackTime = 0
-
-local function executeWeaponKill(tool)
-    if not CFG.KillAura then return end
-    local currentTime = tick()
-    if currentTime - lastAttackTime < CFG.Cooldown then return end
-    lastAttackTime = currentTime
-
-    local myChar = LP.Character
-    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return end
-
-    local hitTargets = {}
+    local char = LP.Character; local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    local hits = {}
 
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LP and plr.Character then
-            local tgtHRP = plr.Character:FindFirstChild("HumanoidRootPart")
-            local tgtHum = plr.Character:FindFirstChildOfClass("Humanoid")
-            
-            if tgtHRP and tgtHum and tgtHum.Health > 0 then
-                local dist = (myHRP.Position - tgtHRP.Position).Magnitude
-                if dist <= CFG.KillRange then
-                    if not hitTargets[plr.Character] then
-                        hitTargets[plr.Character] = true
-                        
+            local thrp = plr.Character:FindFirstChild("HumanoidRootPart")
+            local thum = plr.Character:FindFirstChildOfClass("Humanoid")
+            if thrp and thum and thum.Health > 0 then
+                if (hrp.Position - thrp.Position).Magnitude <= _Z1._V5 then
+                    if not hits[plr.Character] then
+                        hits[plr.Character] = true
                         task.spawn(function()
-                            for i = 1, CFG.HitCount do
+                            for i = 1, _Z1._V7 do
                                 pcall(function() tool:Activate() end)
                                 local handle = tool:FindFirstChild("Handle")
                                 if handle and firetouchinterest then
-                                    for _, part in ipairs(plr.Character:GetChildren()) do
-                                        if part:IsA("BasePart") then
+                                    for _, p in ipairs(plr.Character:GetChildren()) do
+                                        if p:IsA("BasePart") then
                                             pcall(function()
-                                                firetouchinterest(handle, part, 0)
-                                                task.wait(math.random(10, 35) / 1000)
-                                                firetouchinterest(handle, part, 1)
+                                                firetouchinterest(handle, p, 0)
+                                                task.wait(math.random(15, 40) / 1000)
+                                                firetouchinterest(handle, p, 1)
                                             end)
                                         end
                                     end
                                 end
-                                task.wait(math.random(20, 60) / 1000)
+                                task.wait(math.random(30, 80) / 1000)
                             end
                         end)
                     end
@@ -263,83 +198,99 @@ local function executeWeaponKill(tool)
     end
 end
 
-local function onCharacterAdded(char)
-    char.ChildAdded:Connect(function(child)
-        if child:IsA("Tool") then
-            task.wait(0.1)
-            executeWeaponKill(child)
-        end
-    end)
-    local currentTool = char:FindFirstChildOfClass("Tool")
-    if currentTool then executeWeaponKill(currentTool) end
+local function _OnChar(c)
+    c.ChildAdded:Connect(function(ch) if ch:IsA("Tool") then task.wait(0.1); _Kill(ch) end end)
+    local t = c:FindFirstChildOfClass("Tool"); if t then _Kill(t) end
 end
-if LP.Character then onCharacterAdded(LP.Character) end
-LP.CharacterAdded:Connect(onCharacterAdded)
+if LP.Character then _OnChar(LP.Character) end
+LP.CharacterAdded:Connect(_OnChar)
 
--- ESP 渲染
-local espData = {}
-local function checkAndBuildESP()
+-- ==========================================
+-- ESP 终极修复版 (防漏防重叠，精确距离)
+-- ==========================================
+local _ESP = {}
+
+local function _BuildESP()
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LP and not espData[plr] then
-            local g = Instance.new("BillboardGui")
-            g.Name = "e_" .. math.random(10000, 99999); g.Size = UDim2.fromOffset(160, 50)
-            g.AlwaysOnTop = true; g.Enabled = false; g.Parent = espGui
+        if plr ~= LP and not _ESP[plr] then
+            local g = Instance.new("BillboardGui"); g.Name = tostring(math.random(1000,9999)); g.Size = UDim2.fromOffset(160, 50)
+            g.AlwaysOnTop = true; g.Enabled = false; g.MaxDistance = 10000; g.Parent = _G2
             
-            local nm = Instance.new("TextLabel"); nm.Size = UDim2.new(1, 0, 0, 16); nm.BackgroundTransparency = 1; nm.TextColor3 = Color3.new(1, 1, 1); nm.TextStrokeTransparency = 0; nm.Font = Enum.Font.GothamBold; nm.TextSize = 12; nm.Text = plr.Name; nm.Parent = g
-            local ds = Instance.new("TextLabel"); ds.Size = UDim2.new(1, 0, 0, 14); ds.Position = UDim2.fromOffset(0, 16); ds.BackgroundTransparency = 1; ds.TextColor3 = Color3.fromRGB(200, 200, 200); ds.TextStrokeTransparency = 0; ds.TextSize = 11; ds.Parent = g
+            local n = Instance.new("TextLabel"); n.Size = UDim2.new(1, 0, 0, 16); n.BackgroundTransparency = 1; n.TextColor3 = Color3.new(1, 1, 1); n.TextStrokeTransparency = 0; n.Font = Enum.Font.GothamBold; n.TextSize = 12; n.Text = plr.Name; n.Parent = g
+            local d = Instance.new("TextLabel"); d.Size = UDim2.new(1, 0, 0, 14); d.Position = UDim2.fromOffset(0, 16); d.BackgroundTransparency = 1; d.TextColor3 = Color3.fromRGB(200, 200, 200); d.TextStrokeTransparency = 0; d.TextSize = 11; d.Parent = g
             
-            local barBg = Instance.new("Frame"); barBg.Size = UDim2.fromOffset(24, 3); barBg.Position = UDim2.new(0.5, -16, 0, 32); barBg.BackgroundColor3 = Color3.fromRGB(60, 60, 60); barBg.BorderSizePixel = 0; barBg.Visible = false; barBg.Parent = g
-            local bar = Instance.new("Frame"); bar.Size = UDim2.fromScale(1, 1); bar.BackgroundColor3 = Color3.fromRGB(0, 220, 100); bar.BorderSizePixel = 0; bar.Parent = barBg
-            local hpText = Instance.new("TextLabel"); hpText.Size = UDim2.fromOffset(30, 14); hpText.Position = UDim2.new(0.5, 10, 0, 27); hpText.BackgroundTransparency = 1; hpText.TextColor3 = Color3.new(1, 1, 1); hpText.TextStrokeTransparency = 0; hpText.TextSize = 9; hpText.Font = Enum.Font.GothamBold; hpText.Text = "100%"; hpText.TextXAlignment = Enum.TextXAlignment.Left; hpText.Visible = false; hpText.Parent = g
+            local bb = Instance.new("Frame"); bb.Size = UDim2.fromOffset(24, 3); bb.Position = UDim2.new(0.5, -16, 0, 32); bb.BackgroundColor3 = Color3.fromRGB(60, 60, 60); bb.BorderSizePixel = 0; bb.Visible = false; bb.Parent = g
+            local b = Instance.new("Frame"); b.Size = UDim2.fromScale(1, 1); b.BackgroundColor3 = Color3.fromRGB(0, 220, 100); b.BorderSizePixel = 0; b.Parent = bb
+            local h = Instance.new("TextLabel"); h.Size = UDim2.fromOffset(30, 14); h.Position = UDim2.new(0.5, 10, 0, 27); h.BackgroundTransparency = 1; h.TextColor3 = Color3.new(1, 1, 1); h.TextStrokeTransparency = 0; h.TextSize = 9; h.Font = Enum.Font.GothamBold; h.Text = "100%"; h.TextXAlignment = Enum.TextXAlignment.Left; h.Visible = false; h.Parent = g
             
-            espData[plr] = { gui = g, name = nm, dist = ds, bar = bar, barBg = barBg, hpText = hpText }
+            _ESP[plr] = { gui = g, name = n, dist = d, bar = b, barBg = bb, hp = h }
         end
     end
 end
 
-local function getRoleLabel(plr)
+local function _GetRole(plr)
     if plr.Team then
-        local tName = plr.Team.Name
-        if tName and tName ~= "" and tName ~= "Neutral" and tName ~= "???" and not tName:find("%?") then return CN_ROLE_MAP[tName] or tName end
+        local tn = plr.Team.Name
+        if tn and tn ~= "" and tn ~= "Neutral" and tn ~= "???" and not tn:find("%?") then return _Z2[tn] or tn end
     end
     return "平民"
 end
 
-Players.PlayerRemoving:Connect(function(p) 
-    if espData[p] and espData[p].gui then espData[p].gui:Destroy() end; espData[p] = nil 
-end)
+Players.PlayerRemoving:Connect(function(p) if _ESP[p] and _ESP[p].gui then _ESP[p].gui:Destroy() end; _ESP[p] = nil end)
 
-local frameCount = 0
+local _fc = 0
 RunService.RenderStepped:Connect(function()
-    frameCount = frameCount + 1; if frameCount % 2 ~= 0 then return end
-    checkAndBuildESP()
+    _fc = _fc + 1; if _fc % 2 ~= 0 then return end
+    _BuildESP()
 
-    for plr, data in pairs(espData) do
-        if not CFG.ESP or not plr.Parent or not plr.Character then 
-            data.gui.Enabled = false; continue
+    -- 获取自己最新坐标
+    local myChar = LP.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    
+    for plr, data in pairs(_ESP) do
+        -- 如果没开透视，或者对方不在游戏，或者没模型，直接隐藏
+        if not _Z1._V1 or not plr.Parent or not plr.Character then 
+            data.gui.Enabled = false
+            continue
         end
+
         local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
         local hum = plr.Character:FindFirstChildOfClass("Humanoid")
         
         if not hrp or not hum or hum.Health <= 0 then
-            data.gui.Enabled = false; continue
+            data.gui.Enabled = false
+            continue
         end
 
-        data.gui.Enabled = true; data.gui.Adornee = hrp
-        data.dist.Text = math.floor((Camera.CFrame.Position - hrp.Position).Magnitude) .. " studs"
+        -- 【核心修复 1】强制重新绑定，防止重生后UI留在原地
+        data.gui.Adornee = hrp 
+        data.gui.Enabled = true
         
-        if CFG.ESPRole then data.name.Text = "[" .. getRoleLabel(plr) .. "] " .. plr.Name 
-        else data.name.Text = plr.Name end
+        -- 【核心修复 2】计算真实物理距离，而不是相机距离，并且单位转换为米
+        local displayDist = 0
+        if myHRP then
+            local rawDist = (myHRP.Position - hrp.Position).Magnitude
+            displayDist = math.floor(rawDist / 3) -- 除以3，把 studs 换算成正常的“米”
+        end
+        data.dist.Text = displayDist .. " 米"
+
+        -- 更新职业和名字
+        if _Z1._V3 then 
+            data.name.Text = "[" .. _GetRole(plr) .. "] " .. plr.Name 
+        else 
+            data.name.Text = plr.Name 
+        end
         
-        data.barBg.Visible = CFG.ESPHealth; data.hpText.Visible = CFG.ESPHealth
-        if CFG.ESPHealth then
-            local maxHp = math.max(hum.MaxHealth, 1) 
-            local hpRatio = math.clamp(hum.Health / maxHp, 0, 1)
-            data.bar.Size = UDim2.fromScale(hpRatio, 1)
-            data.bar.BackgroundColor3 = Color3.fromRGB(255 * (1 - hpRatio), 255 * hpRatio, 0)
-            hpText.Text = math.floor(hpRatio * 100) .. "%"
+        -- 更新血量
+        data.barBg.Visible = _Z1._V2; data.hp.Visible = _Z1._V2
+        if _Z1._V2 then
+            local mhp = math.max(hum.MaxHealth, 1) 
+            local r = math.clamp(hum.Health / mhp, 0, 1)
+            data.bar.Size = UDim2.fromScale(r, 1)
+            data.bar.BackgroundColor3 = Color3.fromRGB(255 * (1 - r), 255 * r, 0)
+            data.hp.Text = math.floor(r * 100) .. "%"
         end
     end
 end)
 
-print("[Ninja Panel] 侧边栏导航修复版加载完毕")
+print("[Ninja] 终极防漏防重叠修复版已加载")
