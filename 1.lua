@@ -1,5 +1,5 @@
 -- ============================================
--- Ninja Panel (侧边栏导航 · 固定大小)
+-- Ninja Panel (侧边栏导航 · 固定大小 · 修复显示)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -55,23 +55,19 @@ local function mkTitleBtn(text, xoff, cb)
 end
 mkTitleBtn("×", -25, minimize)
 
--- ==========================================
 -- 左侧导航栏
--- ==========================================
 local sidebar = Instance.new("Frame")
-sidebar.Size = UDim2.new(0, 80, 1, -37); sidebar.Position = UDim2.fromOffset(0, 37)
-sidebar.BackgroundColor3 = Color3.fromRGB(20, 20, 25); sidebar.BackgroundTransparency = 0.5
+sidebar.Size = UDim2.new(0, 70, 1, -37); sidebar.Position = UDim2.fromOffset(0, 37)
+sidebar.BackgroundColor3 = Color3.fromRGB(20, 20, 25); sidebar.BackgroundTransparency = 0.3
 sidebar.BorderSizePixel = 0; sidebar.Parent = main
 
 local navLayout = Instance.new("UIListLayout", sidebar)
 navLayout.Padding = UDim.new(0, 4); navLayout.SortOrder = Enum.SortOrder.LayoutOrder
 local navPad = Instance.new("UIPadding", sidebar); navPad.PaddingTop = UDim.new(0, 8)
 
--- ==========================================
 -- 右侧内容区
--- ==========================================
 local content = Instance.new("Frame")
-content.Size = UDim2.new(1, -80, 1, -37); content.Position = UDim2.fromOffset(80, 37)
+content.Size = UDim2.new(1, -70, 1, -37); content.Position = UDim2.fromOffset(70, 37)
 content.BackgroundTransparency = 1; content.Parent = main
 
 local contentScroll = Instance.new("ScrollingFrame")
@@ -79,11 +75,73 @@ contentScroll.Size = UDim2.new(1, 0, 1, 0)
 contentScroll.BackgroundTransparency = 1; contentScroll.BorderSizePixel = 0; contentScroll.ScrollBarThickness = 2
 contentScroll.ScrollBarImageColor3 = Color3.fromRGB(100, 100, 100)
 contentScroll.CanvasSize = UDim2.new(0, 0, 0, 0); contentScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y; contentScroll.Parent = content
-local contentLayout = Instance.new("UIListLayout", contentScroll); contentLayout.Padding = UDim.new(0, 8); contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
-local contentPad = Instance.new("UIPadding", contentScroll); contentPad.PaddingTop = UDim.new(0, 8); contentPad.PaddingLeft = UDim.new(0, 8); contentPad.PaddingRight = UDim.new(0, 8)
+local contentLayout = Instance.new("UIListLayout", contentScroll); contentLayout.Padding = UDim.new(0, 6); contentLayout.SortOrder = Enum.SortOrder.LayoutOrder
+local contentPad = Instance.new("UIPadding", contentScroll); contentPad.PaddingTop = UDim.new(0, 8); contentPad.PaddingLeft = UDim.new(0, 6); contentPad.PaddingRight = UDim.new(0, 8)
 
 -- ==========================================
--- 导航 Tab 切换逻辑
+-- 1. 先定义 UI 组件生成函数
+-- ==========================================
+local function addToggle(parent, name, key)
+    local row = Instance.new("Frame"); row.Size = UDim2.new(1, 0, 0, 38)
+    row.BackgroundColor3 = Color3.fromRGB(35, 35, 42); row.BorderSizePixel = 0; row.Parent = parent
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+    
+    local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, -50, 1, 0); lbl.Position = UDim2.fromOffset(10, 0)
+    lbl.BackgroundTransparency = 1; lbl.Text = name; lbl.TextColor3 = Color3.fromRGB(220, 220, 220); lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 12; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
+
+    local track = Instance.new("Frame"); track.Size = UDim2.fromOffset(34, 18); track.Position = UDim2.new(1, -42, 0.5, -9)
+    track.BackgroundColor3 = Color3.fromRGB(20, 20, 25); track.BorderSizePixel = 0; track.Parent = row; Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+    
+    local fill = Instance.new("Frame"); fill.Size = UDim2.new(0, 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 170, 100); fill.BorderSizePixel = 0; fill.Parent = track; Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+    local knob = Instance.new("Frame"); knob.Size = UDim2.fromOffset(14, 14); knob.Position = UDim2.new(0, 2, 0.5, -7); knob.BackgroundColor3 = Color3.fromRGB(200, 200, 200); knob.Parent = track; Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+    
+    local btn = Instance.new("TextButton"); btn.Size = UDim2.fromScale(1,1); btn.BackgroundTransparency = 1; btn.Text = ""; btn.Parent = row
+    
+    local function updateUI()
+        if CFG[key] then
+            TweenService:Create(fill, TweenInfo.new(0.15), {Size = UDim2.fromScale(1,1)}):Play()
+            TweenService:Create(knob, TweenInfo.new(0.15), {Position = UDim2.new(1, -16, 0.5, -7), BackgroundColor3 = Color3.new(1,1,1)}):Play()
+        else
+            TweenService:Create(fill, TweenInfo.new(0.15), {Size = UDim2.new(0, 0, 1, 0)}):Play()
+            TweenService:Create(knob, TweenInfo.new(0.15), {Position = UDim2.new(0, 2, 0.5, -7), BackgroundColor3 = Color3.fromRGB(200, 200, 200)}):Play()
+        end
+    end
+    btn.MouseButton1Click:Connect(function() CFG[key] = not CFG[key]; updateUI() end)
+    updateUI()
+end
+
+local function addSlider(parent, name, minVal, maxVal, defaultVal, callback)
+    local row = Instance.new("Frame"); row.Size = UDim2.new(1, 0, 0, 48)
+    row.BackgroundColor3 = Color3.fromRGB(35, 35, 42); row.BorderSizePixel = 0; row.Parent = parent
+    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
+    
+    local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, 0, 0, 20); lbl.Position = UDim2.fromOffset(10, 4)
+    lbl.BackgroundTransparency = 1; lbl.Text = name .. ": " .. defaultVal; lbl.TextColor3 = Color3.fromRGB(220, 220, 220); lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 11; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
+
+    local track = Instance.new("Frame"); track.Size = UDim2.new(1, -20, 0, 6); track.Position = UDim2.new(0, 10, 1, -12)
+    track.BackgroundColor3 = Color3.fromRGB(20, 20, 25); track.BorderSizePixel = 0; track.Parent = row; Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+    
+    local fill = Instance.new("Frame"); fill.Size = UDim2.new((defaultVal-minVal)/(maxVal-minVal), 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 170, 100); fill.BorderSizePixel = 0; fill.Parent = track; Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+    local knob = Instance.new("Frame"); knob.Size = UDim2.fromOffset(14, 14); knob.Position = UDim2.new((defaultVal-minVal)/(maxVal-minVal), -7, 0.5, 0); knob.AnchorPoint = Vector2.new(0, 0.5); knob.BackgroundColor3 = Color3.new(1,1,1); knob.Parent = track; Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+    local touchArea = Instance.new("TextButton"); touchArea.Size = UDim2.new(1, 0, 1, 0); touchArea.BackgroundTransparency = 1; touchArea.Text = ""; touchArea.Parent = row
+    local isDragging = false
+    local function updateVal(xPos)
+        local relX = math.clamp((xPos - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+        local val = minVal + (maxVal - minVal) * relX
+        if maxVal <= 5 then val = math.floor(val * 10) / 10 else val = math.floor(val) end
+        fill.Size = UDim2.new(relX, 0, 1, 0); knob.Position = UDim2.new(relX, -7, 0.5, 0)
+        lbl.Text = name .. ": " .. val; callback(val)
+    end
+    touchArea.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = true; updateVal(input.Position.X) end end)
+    UIS.InputChanged:Connect(function(input) if isDragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then updateVal(input.Position.X) end end)
+    UIS.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = false end end)
+end
+
+-- ==========================================
+-- 2. 再定义切换页面的逻辑
 -- ==========================================
 local currentTab = ""
 local navBtns = {}
@@ -102,7 +160,7 @@ local function updateNavUI()
             btn.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
             btn.TextColor3 = Color3.new(1, 1, 1)
         else
-            btn.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+            btn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
             btn.TextColor3 = Color3.fromRGB(150, 150, 160)
         end
     end
@@ -135,7 +193,7 @@ end
 local function createNavBtn(name)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(1, -8, 0, 36); btn.Position = UDim2.fromOffset(4, 0)
-    btn.BackgroundColor3 = Color3.fromRGB(25, 25, 32)
+    btn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
     btn.Text = name; btn.TextColor3 = Color3.fromRGB(150, 150, 160)
     btn.Font = Enum.Font.GothamBold; btn.TextSize = 13
     btn.Parent = sidebar
@@ -148,68 +206,8 @@ createNavBtn("透视")
 createNavBtn("战斗")
 
 -- ==========================================
--- UI 组件生成
+-- 3. 初始化，默认显示透视
 -- ==========================================
-local function addToggle(parent, name, key)
-    local row = Instance.new("Frame"); row.Size = UDim2.new(1, 0, 0, 40)
-    row.BackgroundColor3 = Color3.fromRGB(35, 35, 42); row.BorderSizePixel = 0; row.Parent = parent
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
-    
-    local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, -50, 1, 0); lbl.Position = UDim2.fromOffset(12, 0)
-    lbl.BackgroundTransparency = 1; lbl.Text = name; lbl.TextColor3 = Color3.fromRGB(220, 220, 220); lbl.Font = Enum.Font.Gotham
-    lbl.TextSize = 12; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
-
-    local track = Instance.new("Frame"); track.Size = UDim2.fromOffset(36, 20); track.Position = UDim2.new(1, -44, 0.5, -10)
-    track.BackgroundColor3 = Color3.fromRGB(20, 20, 25); track.BorderSizePixel = 0; track.Parent = row; Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
-    
-    local fill = Instance.new("Frame"); fill.Size = UDim2.new(0, 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 170, 100); fill.BorderSizePixel = 0; fill.Parent = track; Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-    local knob = Instance.new("Frame"); knob.Size = UDim2.fromOffset(16, 16); knob.Position = UDim2.new(0, 2, 0.5, -8); knob.BackgroundColor3 = Color3.fromRGB(200, 200, 200); knob.Parent = track; Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-    
-    local btn = Instance.new("TextButton"); btn.Size = UDim2.fromScale(1,1); btn.BackgroundTransparency = 1; btn.Text = ""; btn.Parent = row
-    
-    local function updateUI()
-        if CFG[key] then
-            TweenService:Create(fill, TweenInfo.new(0.15), {Size = UDim2.fromScale(1,1)}):Play()
-            TweenService:Create(knob, TweenInfo.new(0.15), {Position = UDim2.new(1, -18, 0.5, -8), BackgroundColor3 = Color3.new(1,1,1)}):Play()
-        else
-            TweenService:Create(fill, TweenInfo.new(0.15), {Size = UDim2.new(0, 0, 1, 0)}):Play()
-            TweenService:Create(knob, TweenInfo.new(0.15), {Position = UDim2.new(0, 2, 0.5, -8), BackgroundColor3 = Color3.fromRGB(200, 200, 200)}):Play()
-        end
-    end
-    btn.MouseButton1Click:Connect(function() CFG[key] = not CFG[key]; updateUI() end)
-    updateUI()
-end
-
-local function addSlider(parent, name, minVal, maxVal, defaultVal, callback)
-    local row = Instance.new("Frame"); row.Size = UDim2.new(1, 0, 0, 50)
-    row.BackgroundColor3 = Color3.fromRGB(35, 35, 42); row.BorderSizePixel = 0; row.Parent = parent
-    Instance.new("UICorner", row).CornerRadius = UDim.new(0, 6)
-    
-    local lbl = Instance.new("TextLabel"); lbl.Size = UDim2.new(1, 0, 0, 20); lbl.Position = UDim2.fromOffset(12, 4)
-    lbl.BackgroundTransparency = 1; lbl.Text = name .. ": " .. defaultVal; lbl.TextColor3 = Color3.fromRGB(220, 220, 220); lbl.Font = Enum.Font.Gotham
-    lbl.TextSize = 12; lbl.TextXAlignment = Enum.TextXAlignment.Left; lbl.Parent = row
-
-    local track = Instance.new("Frame"); track.Size = UDim2.new(1, -24, 0, 6); track.Position = UDim2.new(0, 12, 1, -14)
-    track.BackgroundColor3 = Color3.fromRGB(20, 20, 25); track.BorderSizePixel = 0; track.Parent = row; Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
-    
-    local fill = Instance.new("Frame"); fill.Size = UDim2.new((defaultVal-minVal)/(maxVal-minVal), 0, 1, 0); fill.BackgroundColor3 = Color3.fromRGB(0, 170, 100); fill.BorderSizePixel = 0; fill.Parent = track; Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-    local knob = Instance.new("Frame"); knob.Size = UDim2.fromOffset(16, 16); knob.Position = UDim2.new((defaultVal-minVal)/(maxVal-minVal), -8, 0.5, 0); knob.AnchorPoint = Vector2.new(0, 0.5); knob.BackgroundColor3 = Color3.new(1,1,1); knob.Parent = track; Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-
-    local touchArea = Instance.new("TextButton"); touchArea.Size = UDim2.new(1, 0, 1, 0); touchArea.BackgroundTransparency = 1; touchArea.Text = ""; touchArea.Parent = row
-    local isDragging = false
-    local function updateVal(xPos)
-        local relX = math.clamp((xPos - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-        local val = minVal + (maxVal - minVal) * relX
-        if maxVal <= 5 then val = math.floor(val * 10) / 10 else val = math.floor(val) end
-        fill.Size = UDim2.new(relX, 0, 1, 0); knob.Position = UDim2.new(relX, -8, 0.5, 0)
-        lbl.Text = name .. ": " .. val; callback(val)
-    end
-    touchArea.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = true; updateVal(input.Position.X) end end)
-    UIS.InputChanged:Connect(function(input) if isDragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then updateVal(input.Position.X) end end)
-    UIS.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then isDragging = false end end)
-end
-
--- 默认打开透视页
 switchTab("透视")
 
 -- ==========================================
@@ -344,4 +342,4 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-print("[Ninja Panel] 侧边栏导航版加载完毕")
+print("[Ninja Panel] 侧边栏导航修复版加载完毕")
