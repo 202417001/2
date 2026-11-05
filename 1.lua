@@ -1,5 +1,5 @@
 -- ============================================
--- DeepSeek Capsule UI + 双轨透视引擎
+-- DeepSeek UI + 终极隔离级透视
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -8,24 +8,28 @@ local TweenService = game:GetService("TweenService")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
-local function getHiddenGui(name)
-    local g = Instance.new("ScreenGui"); g.Name = name; g.ResetOnSpawn = false; g.IgnoreGuiInset = true
-    if syn and syn.protect_gui then syn.protect_gui(g); g.Parent = game:GetService("CoreGui")
-    elseif gethui then g.Parent = gethui() else g.Parent = LP:WaitForChild("PlayerGui") end
-    return g
-end
+-- ==========================================
+-- 1. 确认容器 (只取一次，局部变量)
+-- ==========================================
+local container = (gethui and gethui()) or game:GetService("CoreGui")
 
-local gui = getHiddenGui("DeepSeekUI_" .. math.random(1000, 9999))
+-- 所有内容只认这个唯一的父级，名字随机去特征
+local mainGui = Instance.new("ScreenGui")
+mainGui.Name = tostring(math.random(100000, 999999))
+mainGui.ResetOnSpawn = false
+mainGui.IgnoreGuiInset = true
+mainGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+mainGui.Parent = container
 
 -- ==========================================
--- 1. 配置项
+-- 2. 配置项
 -- ==========================================
 local Config = {
     ESP = false
 }
 
 -- ==========================================
--- 2. DeepSeek UI (胶囊 + 菜单)
+-- 3. DeepSeek 胶囊面板 (并入同一父级)
 -- ==========================================
 local mainFrame = Instance.new("Frame")
 mainFrame.AnchorPoint = Vector2.new(0.5, 0)
@@ -35,7 +39,7 @@ mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 mainFrame.BorderSizePixel = 0
 mainFrame.ClipsDescendants = true
 mainFrame.Active = false
-mainFrame.Parent = gui
+mainFrame.Parent = mainGui
 
 local uiCorner = Instance.new("UICorner", mainFrame)
 uiCorner.CornerRadius = UDim.new(1, 0) 
@@ -144,7 +148,7 @@ local function addToggle(text, key)
     updateUI()
 end
 
-addToggle("开启双轨透视", "ESP")
+addToggle("开启深度透视", "ESP")
 
 -- 展开/收起动画
 local openTweenInfo = TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
@@ -176,71 +180,50 @@ openBtn.MouseButton1Click:Connect(function() toggleUI(true) end)
 closeBtn.MouseButton1Click:Connect(function() toggleUI(false) end)
 
 -- ==========================================
--- 3. 透视引擎 (完全遵循你的架构)
+-- 4. 透视核心逻辑 (纯屏幕空间 TextLabel)
 -- ==========================================
-local hasDrawing = pcall(function() return Drawing ~= nil end)
-if hasDrawing then hasDrawing = Drawing end
-
--- 检测中文
-local function hasChinese(str)
-    for _, code in utf8.codes(str) do
-        if code > 127 then return true end
-    end
-    return false
-end
-
 local espCache = {}
 
--- 初始化玩家 (收敛创建，不重建)
+-- 实例只建一次
 local function initPlayer(plr)
     if plr == LP or espCache[plr] then return end
     
-    local isCN = hasChinese(plr.Name)
-    local data = { isCN = isCN }
+    local data = {}
     
-    -- 中文名：走 BillboardGui (防乱码)
-    if isCN then
-        local bg = Instance.new("BillboardGui")
-        bg.Name = tostring(math.random(10000, 99999))
-        bg.Size = UDim2.new(0, 200, 0, 40)
-        bg.AlwaysOnTop = true
-        bg.Enabled = false
-        bg.Parent = gui
-        
-        local txt = Instance.new("TextLabel")
-        txt.Size = UDim2.new(1, 0, 0, 20)
-        txt.BackgroundTransparency = 1
-        txt.TextColor3 = Color3.new(1,1,1)
-        txt.TextStrokeTransparency = 0
-        txt.Font = Enum.Font.GothamBold
-        txt.TextSize = 14
-        txt.Text = plr.Name
-        txt.Parent = bg
-        
-        data.bg = bg
-    end
+    -- 空心方框 (用 BorderSizePixel 拼)
+    local box = Instance.new("Frame")
+    box.Name = tostring(math.random(10000, 99999))
+    box.BackgroundTransparency = 1
+    box.BorderSizePixel = 1
+    box.BorderColor3 = Color3.fromRGB(0, 255, 100)
+    box.Visible = false
+    box.Parent = mainGui
     
-    -- 英文/数字名、方框、距离：走 Drawing (轻量)
-    if hasDrawing then
-        data.square = Drawing.new("Square")
-        data.square.Thickness = 1
-        data.square.Color = Color3.fromRGB(0, 255, 100)
-        data.square.Filled = false
-        
-        if not isCN then
-            data.nameTxt = Drawing.new("Text")
-            data.nameTxt.Center = true
-            data.nameTxt.Outline = true
-            data.nameTxt.Size = 14
-            data.nameTxt.Color = Color3.new(1,1,1)
-        end
-        
-        data.distTxt = Drawing.new("Text")
-        data.distTxt.Center = true
-        data.distTxt.Outline = true
-        data.distTxt.Size = 12
-        data.distTxt.Color = Color3.fromRGB(200,200,200)
-    end
+    -- 名字 (强制统一用 SourceSansBold 支持中文)
+    local nameTxt = Instance.new("TextLabel")
+    nameTxt.Name = tostring(math.random(10000, 99999))
+    nameTxt.BackgroundTransparency = 1
+    nameTxt.TextColor3 = Color3.new(1, 1, 1)
+    nameTxt.TextStrokeTransparency = 0
+    nameTxt.Font = Enum.Font.SourceSansBold
+    nameTxt.TextSize = 14
+    nameTxt.Visible = false
+    nameTxt.Parent = mainGui
+    
+    -- 距离
+    local distTxt = Instance.new("TextLabel")
+    distTxt.Name = tostring(math.random(10000, 99999))
+    distTxt.BackgroundTransparency = 1
+    distTxt.TextColor3 = Color3.fromRGB(200, 200, 200)
+    distTxt.TextStrokeTransparency = 0
+    distTxt.Font = Enum.Font.SourceSansBold
+    distTxt.TextSize = 12
+    distTxt.Visible = false
+    distTxt.Parent = mainGui
+    
+    data.box = box
+    data.nameTxt = nameTxt
+    data.distTxt = distTxt
     
     espCache[plr] = data
 end
@@ -248,77 +231,80 @@ end
 Players.PlayerAdded:Connect(initPlayer)
 for _, p in ipairs(Players:GetPlayers()) do initPlayer(p) end
 
+-- 离开时清理干净
 Players.PlayerRemoving:Connect(function(plr)
     local d = espCache[plr]
     if d then
-        if d.bg then d.bg:Destroy() end
-        if d.square then d.square:Remove() end
-        if d.nameTxt then d.nameTxt:Remove() end
-        if d.distTxt then d.distTxt:Remove() end
+        if d.box then d.box:Destroy() end
+        if d.nameTxt then d.nameTxt:Destroy() end
+        if d.distTxt then d.distTxt:Destroy() end
         espCache[plr] = nil
     end
 end)
 
--- 渲染循环 (pcall 保护，极致抗卡)
-RunService.RenderStepped:Connect(function()
-    for plr, data in pairs(espCache) do
-        pcall(function()
-            if not Config.ESP or not plr.Character then
-                if data.bg then data.bg.Enabled = false end
-                if data.square then data.square.Visible = false end
-                if data.nameTxt then data.nameTxt.Visible = false end
-                if data.distTxt then data.distTxt.Visible = false end
-                return
+-- ==========================================
+-- 5. 渲染更新循环 (10毫秒降频更新)
+-- ==========================================
+task.spawn(function()
+    while task.wait(0.01) do -- 用户要求的 10 毫秒
+        if not Config.ESP then
+            for _, d in pairs(espCache) do
+                d.box.Visible = false; d.nameTxt.Visible = false; d.distTxt.Visible = false
             end
-            
-            local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-            local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-            
-            if not hrp or not hum or hum.Health <= 0 then
-                if data.bg then data.bg.Enabled = false end
-                if data.square then data.square.Visible = false end
-                if data.nameTxt then data.nameTxt.Visible = false end
-                if data.distTxt then data.distTxt.Visible = false end
-                return
-            end
-            
-            -- 1. BillboardGui (中文名) 跟随头上
-            if data.bg then
-                data.bg.Adornee = hrp
-                data.bg.Enabled = true
-            end
-            
-            -- 2. Drawing (投影方框、距离、英文名)
-            if hasDrawing then
+            continue
+        end
+        
+        for plr, data in pairs(espCache) do
+            pcall(function()
+                if not plr.Character then
+                    data.box.Visible = false; data.nameTxt.Visible = false; data.distTxt.Visible = false
+                    return
+                end
+                
+                local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+                
+                if not hrp or not hum or hum.Health <= 0 then
+                    data.box.Visible = false; data.nameTxt.Visible = false; data.distTxt.Visible = false
+                    return
+                end
+                
+                -- 获取屏幕坐标
                 local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 2, 0))
                 
                 if onScreen then
-                    local dist = math.floor((Camera.CFrame.Position - hrp.Position).Magnitude / 3)
+                    -- 计算距离 (3 studs = 1m)
+                    local distance = math.floor((Camera.CFrame.Position - hrp.Position).Magnitude / 3)
                     
-                    -- 方框
-                    data.square.Visible = true
-                    data.square.Size = Vector2.new(40, 60)
-                    data.square.Position = Vector2.new(pos.X - 20, pos.Y - 30)
+                    -- 根据距离算方框尺寸 (越远越小，给个合理缩放)
+                    local boxHeight = math.clamp(6000 / distance, 30, 100)
+                    local boxWidth = boxHeight * 0.6
                     
-                    -- 距离
+                    -- 1. 更新框 (居中)
+                    data.box.Visible = true
+                    data.box.AnchorPoint = Vector2.new(0.5, 0.5)
+                    data.box.Size = UDim2.fromOffset(boxWidth, boxHeight)
+                    data.box.Position = UDim2.fromOffset(pos.X, pos.Y)
+                    
+                    -- 2. 更新名字 (框上方)
+                    data.nameTxt.Visible = true
+                    data.nameTxt.AnchorPoint = Vector2.new(0.5, 1)
+                    data.nameTxt.Size = UDim2.fromOffset(200, 20)
+                    data.nameTxt.Position = UDim2.fromOffset(pos.X, pos.Y - (boxHeight / 2) - 2)
+                    data.nameTxt.Text = plr.Name
+                    
+                    -- 3. 更新距离 (框下方)
                     data.distTxt.Visible = true
-                    data.distTxt.Text = tostring(dist) .. "m"
-                    data.distTxt.Position = Vector2.new(pos.X, pos.Y + 35)
-                    
-                    -- 英文/数字名
-                    if not data.isCN and data.nameTxt then
-                        data.nameTxt.Visible = true
-                        data.nameTxt.Text = plr.Name
-                        data.nameTxt.Position = Vector2.new(pos.X, pos.Y - 45)
-                    end
+                    data.distTxt.AnchorPoint = Vector2.new(0.5, 0)
+                    data.distTxt.Size = UDim2.fromOffset(100, 20)
+                    data.distTxt.Position = UDim2.fromOffset(pos.X, pos.Y + (boxHeight / 2) + 2)
+                    data.distTxt.Text = tostring(distance) .. "m"
                 else
-                    data.square.Visible = false
-                    data.distTxt.Visible = false
-                    if data.nameTxt then data.nameTxt.Visible = false end
+                    data.box.Visible = false; data.nameTxt.Visible = false; data.distTxt.Visible = false
                 end
-            end
-        end)
+            end)
+        end
     end
 end)
 
-print("[DeepSeek] 双轨透视加载完毕")
+print("[DeepSeek] 隔离级 10ms 刷新透视加载完毕")
