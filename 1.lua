@@ -1,5 +1,5 @@
 -- ============================================
--- DeepSeek Studio (星尘汇聚 · 静默自瞄 FOV)
+-- DeepSeek Studio (静默自瞄 · 防载具卡死版)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -312,7 +312,6 @@ local function CreateNavBtn(name)
     NavButtons[name] = btn
 end
 
--- 组件生成器
 local function AddCard(parent, text, toggleKey)
     local card = Instance.new("Frame")
     card.Size = UDim2.new(1, 0, 0, 44)
@@ -680,24 +679,29 @@ end
 PlayIntroAnimation()
 
 -- ==========================================
--- 4. 核心：静默自瞄 (Silent Aim) & FOV
+-- 4. 核心：静默自瞄 (严格过滤防卡死)
 -- ==========================================
 local cachedTarget = nil
 
 -- 找目标
 task.spawn(function()
     while task.wait(0.05) do
+        -- 如果坐在车里，直接清空目标，不找
+        local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Sit then
+            cachedTarget = nil
+            continue
+        end
+        
         if Config.SilentAim then
             local closest, minDist = nil, math.huge
             local center = Camera.ViewportSize / 2
-            local myChar = LP.Character
             
             for _, plr in ipairs(Players:GetPlayers()) do
                 if plr ~= LP and plr.Character then
                     local part = plr.Character:FindFirstChild("Head") or plr.Character:FindFirstChild("HumanoidRootPart")
-                    local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-                    if part and hum and hum.Health > 0 then
-                        -- 过滤队友 (如果有Team的话)
+                    local thum = plr.Character:FindFirstChildOfClass("Humanoid")
+                    if part and thum and thum.Health > 0 then
                         if not plr.Team or plr.Team ~= LP.Team then
                             local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
                             if onScreen then
@@ -733,15 +737,30 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- 拦截射线
+-- 拦截射线 (含载具防卡死过滤)
 if hookmetamethod then
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
+        
         if not checkcaller() and Config.SilentAim and cachedTarget then
+            local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+            
+            -- 核心 1：如果你在车里，立刻放行
+            if not hum or hum.Sit then
+                return oldNamecall(self, ...)
+            end
+            
+            -- 核心 2：如果你手里没拿东西，立刻放行
+            local tool = LP.Character and LP.Character:FindFirstChildOfClass("Tool")
+            if not tool then
+                return oldNamecall(self, ...)
+            end
+            
             if method == "Raycast" or method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" then
                 local args = {...}
-                -- 跳过相机自带的射线检测 (RaycastParams)
+                
+                -- 核心 3：过滤相机射线
                 local isCameraRay = false
                 if method == "Raycast" and type(args[2]) == "RaycastParams" then
                     if args[2].FilterDescendantsInstances then
@@ -751,7 +770,25 @@ if hookmetamethod then
                     end
                 end
                 
+                -- 核心 4：只拦截距离你角色 15 码以内的射线 (说明是从你手上发出的)
+                local isWeaponRay = false
                 if not isCameraRay then
+                    local origin = args[1]
+                    if typeof(origin) == "Vector3" then
+                        local myHRP = LP.Character:FindFirstChild("HumanoidRootPart")
+                        if myHRP and (origin - myHRP.Position).Magnitude < 15 then
+                            isWeaponRay = true
+                        end
+                    elseif typeof(origin) == "Ray" then
+                        local myHRP = LP.Character:FindFirstChild("HumanoidRootPart")
+                        if myHRP and (origin.Origin - myHRP.Position).Magnitude < 15 then
+                            isWeaponRay = true
+                        end
+                    end
+                end
+                
+                -- 全条件满足才重写方向
+                if isWeaponRay then
                     if method == "Raycast" then
                         args[2] = (cachedTarget.Position - args[1].Origin).Unit * 9999
                     else
@@ -897,4 +934,4 @@ task.spawn(function()
     end
 end)
 
-print("[DeepSeek] 静默自瞄 FOV 版加载完毕")
+print("[DeepSeek] 静默自瞄防卡死版加载完毕")
