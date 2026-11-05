@@ -1,5 +1,5 @@
 -- ============================================
--- DeepSeek Studio (星尘汇聚启动特效 · 战斗版)
+-- DeepSeek Studio (星尘汇聚 · 静默自瞄 FOV)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -21,9 +21,8 @@ mainGui.Parent = container
 local Config = { 
     ESP = false, 
     Highlight = false,
-    KillAura = false,
-    KillRange = 30, 
-    KillHitCount = 2,
+    SilentAim = false,
+    FOV = 150,
     Filters = {
         ["平民"] = true, ["警察"] = true, ["医生"] = true,
         ["消防员"] = true, ["厨师"] = true, ["快递员"] = true,
@@ -42,7 +41,7 @@ local Colors = {
 }
 
 -- ==========================================
--- 1. 高亮池
+-- 1. 高亮池 & FOV 圈
 -- ==========================================
 local HIGHLIGHT_POOL_SIZE = 20
 local highlightPool = {}
@@ -60,6 +59,16 @@ for i = 1, HIGHLIGHT_POOL_SIZE do
     hl.Adornee = nil
     hl.Parent = hlFolder
     table.insert(highlightPool, hl)
+end
+
+local fovCircle = nil
+if Drawing then
+    fovCircle = Drawing.new("Circle")
+    fovCircle.Thickness = 1.5
+    fovCircle.Color = Color3.fromRGB(0, 255, 150)
+    fovCircle.Transparency = 0.8
+    fovCircle.Filled = false
+    fovCircle.Visible = false
 end
 
 -- ==========================================
@@ -124,7 +133,7 @@ local function isRoleVisible(roleName)
 end
 
 -- ==========================================
--- 3. Fluent UI (初始隐藏，准备播动画)
+-- 3. Fluent UI
 -- ==========================================
 local Main = Instance.new("Frame")
 Main.AnchorPoint = Vector2.new(0.5, 0)
@@ -134,7 +143,7 @@ Main.BackgroundColor3 = Colors.Bg
 Main.BorderSizePixel = 0
 Main.ClipsDescendants = true
 Main.Parent = mainGui
-Main.Visible = false -- 初始隐藏
+Main.Visible = false
 local MainCorner = Instance.new("UICorner", Main)
 MainCorner.CornerRadius = UDim.new(1, 0)
 local MainStroke = Instance.new("UIStroke", Main)
@@ -576,9 +585,8 @@ AddMultiSelectDropdown(page_Visual, "透视阵营选择",
 )
 
 local page_Combat = CreatePage("战斗")
-AddCard(page_Combat, "杀戮功能", "KillAura")
-AddSlider(page_Combat, "杀戮范围 (米)", 10, 150, Config.KillRange, function(v) Config.KillRange = v end)
-AddSlider(page_Combat, "攻击次数 (倍率)", 1, 10, Config.KillHitCount, function(v) Config.KillHitCount = v end)
+AddCard(page_Combat, "静默自瞄", "SilentAim")
+AddSlider(page_Combat, "瞄准范围 (FOV)", 50, 600, Config.FOV, function(v) Config.FOV = v end)
 
 SwitchPage("视觉")
 
@@ -616,7 +624,6 @@ local function PlayIntroAnimation()
     local particles = {}
     local PARTICLE_COUNT = 60
     
-    -- 目标位置 (屏幕正上方偏下一点点，即胶囊的位置)
     local targetX = 0.5
     local targetY = 0.05 
     
@@ -634,24 +641,15 @@ local function PlayIntroAnimation()
         local startX, startY
         local edge = math.random(1, 3)
         
-        if edge == 1 then -- 左边缘
-            startX = 0
-            startY = math.random(0, 100) / 100
-        elseif edge == 2 then -- 右边缘
-            startX = 1
-            startY = math.random(0, 100) / 100
-        else -- 底部
-            startX = math.random(0, 100) / 100
-            startY = 1
-        end
+        if edge == 1 then startX = 0; startY = math.random(0, 100) / 100
+        elseif edge == 2 then startX = 1; startY = math.random(0, 100) / 100
+        else startX = math.random(0, 100) / 100; startY = 1 end
         
         dot.Position = UDim2.new(startX, 0, startY, 0)
         
-        -- 终点稍微散布在目标点周围，制造汇聚的挤压感
         local endX = targetX + (math.random(-20, 20) / 1000)
         local endY = targetY + (math.random(-20, 20) / 1000)
         
-        -- 随机延迟，让它们不是同时到达
         local delayTime = math.random(0, 30) / 100
         local travelTime = math.random(30, 60) / 100
         
@@ -662,13 +660,12 @@ local function PlayIntroAnimation()
                 local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
                 TweenService:Create(dot, tweenInfo, {
                     Position = UDim2.new(endX, 0, endY, 0),
-                    BackgroundTransparency = 1 -- 到终点时消失
+                    BackgroundTransparency = 1
                 }):Play()
             end
         end)
     end
     
-    -- 大约 1 秒后所有粒子汇聚完毕，胶囊实体化
     task.delay(1.0, function()
         for _, dot in ipairs(particles) do
             if dot then dot:Destroy() end
@@ -676,82 +673,98 @@ local function PlayIntroAnimation()
         
         Main.Visible = true
         Main.Size = UDim2.fromOffset(0, 0)
-        
-        -- 胶囊实体化，使用 Back 缓动（带一点弹簧效果）
         local popInfo = TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
         TweenService:Create(Main, popInfo, {Size = UDim2.fromOffset(110, 32)}):Play()
     end)
 end
-
--- 启动！
 PlayIntroAnimation()
 
 -- ==========================================
--- 4. 核心：战斗(杀戮)逻辑
+-- 4. 核心：静默自瞄 (Silent Aim) & FOV
 -- ==========================================
-local lastAttackTime = 0
+local cachedTarget = nil
 
-local function executeCombat(tool)
-    if not Config.KillAura then return end
-    local currentTime = tick()
-    if currentTime - lastAttackTime < 1.0 then return end
-    lastAttackTime = currentTime
-
-    local myChar = LP.Character
-    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return end
-
-    local hitTargets = {}
-
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LP and plr.Character then
-            local tgtHRP = plr.Character:FindFirstChild("HumanoidRootPart")
-            local tgtHum = plr.Character:FindFirstChildOfClass("Humanoid")
+-- 找目标
+task.spawn(function()
+    while task.wait(0.05) do
+        if Config.SilentAim then
+            local closest, minDist = nil, math.huge
+            local center = Camera.ViewportSize / 2
+            local myChar = LP.Character
             
-            if tgtHRP and tgtHum and tgtHum.Health > 0 then
-                local dist = (myHRP.Position - tgtHRP.Position).Magnitude
-                if dist <= (Config.KillRange * 3) then
-                    if not hitTargets[plr.Character] then
-                        hitTargets[plr.Character] = true
-                        task.spawn(function()
-                            for i = 1, Config.KillHitCount do
-                                if math.random(1, 100) > 25 then
-                                    pcall(function() tool:Activate() end)
-                                    local handle = tool:FindFirstChild("Handle")
-                                    if handle and firetouchinterest then
-                                        for _, part in ipairs(plr.Character:GetChildren()) do
-                                            if part:IsA("BasePart") then
-                                                pcall(function()
-                                                    firetouchinterest(handle, part, 0)
-                                                    task.wait(math.random(15, 40) / 1000)
-                                                    firetouchinterest(handle, part, 1)
-                                                end)
-                                            end
-                                        end
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= LP and plr.Character then
+                    local part = plr.Character:FindFirstChild("Head") or plr.Character:FindFirstChild("HumanoidRootPart")
+                    local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+                    if part and hum and hum.Health > 0 then
+                        -- 过滤队友 (如果有Team的话)
+                        if not plr.Team or plr.Team ~= LP.Team then
+                            local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                            if onScreen then
+                                local distToCenter = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                                if distToCenter <= Config.FOV then
+                                    local dist3D = (Camera.CFrame.Position - part.Position).Magnitude
+                                    if dist3D < minDist then 
+                                        minDist = dist3D; closest = part 
                                     end
                                 end
-                                task.wait(math.random(20, 60) / 1000)
                             end
-                        end)
+                        end
                     end
                 end
             end
+            cachedTarget = closest
+        else
+            cachedTarget = nil
         end
     end
-end
+end)
 
-local function onCharacterAdded(char)
-    char.ChildAdded:Connect(function(child)
-        if child:IsA("Tool") then
-            task.wait(0.1)
-            executeCombat(child)
+-- 渲染 FOV 圈
+RunService.RenderStepped:Connect(function()
+    if fovCircle then
+        if Config.SilentAim then
+            fovCircle.Visible = true
+            fovCircle.Position = Camera.ViewportSize / 2
+            fovCircle.Radius = Config.FOV
+        else
+            fovCircle.Visible = false
         end
+    end
+end)
+
+-- 拦截射线
+if hookmetamethod then
+    local oldNamecall
+    oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+        local method = getnamecallmethod()
+        if not checkcaller() and Config.SilentAim and cachedTarget then
+            if method == "Raycast" or method == "FindPartOnRay" or method == "FindPartOnRayWithIgnoreList" then
+                local args = {...}
+                -- 跳过相机自带的射线检测 (RaycastParams)
+                local isCameraRay = false
+                if method == "Raycast" and type(args[2]) == "RaycastParams" then
+                    if args[2].FilterDescendantsInstances then
+                        for _, v in ipairs(args[2].FilterDescendantsInstances) do
+                            if v == Camera then isCameraRay = true end
+                        end
+                    end
+                end
+                
+                if not isCameraRay then
+                    if method == "Raycast" then
+                        args[2] = (cachedTarget.Position - args[1].Origin).Unit * 9999
+                    else
+                        local ray = args[1]
+                        args[1] = Ray.new(ray.Origin, (cachedTarget.Position - ray.Origin).Unit * 9999)
+                    end
+                    return oldNamecall(self, unpack(args))
+                end
+            end
+        end
+        return oldNamecall(self, ...)
     end)
-    local currentTool = char:FindFirstChildOfClass("Tool")
-    if currentTool then executeCombat(currentTool) end
 end
-if LP.Character then onCharacterAdded(LP.Character) end
-LP.CharacterAdded:Connect(onCharacterAdded)
 
 -- ==========================================
 -- 5. 底层透视与高亮逻辑
@@ -884,4 +897,4 @@ task.spawn(function()
     end
 end)
 
-print("[DeepSeek] 星尘汇聚特效+战斗版加载完毕")
+print("[DeepSeek] 静默自瞄 FOV 版加载完毕")
