@@ -1,10 +1,11 @@
 -- ============================================
--- DeepSeek Studio (属性锁值版 · 多页导航)
+-- DeepSeek Studio (深度诊断 + 属性/数值锁)
 -- ============================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
@@ -122,7 +123,7 @@ local function isRoleVisible(roleName)
 end
 
 -- ==========================================
--- 3. Fluent UI 与 导航系统
+-- 3. Fluent UI
 -- ==========================================
 local Main = Instance.new("Frame")
 Main.AnchorPoint = Vector2.new(0.5, 0)
@@ -194,7 +195,6 @@ CloseBtn.TextSize = 20
 CloseBtn.ZIndex = 10
 CloseBtn.Parent = TopBar
 
--- 左侧导航
 local Sidebar = Instance.new("Frame")
 Sidebar.Size = UDim2.fromOffset(120, 250)
 Sidebar.Position = UDim2.fromOffset(8, 40)
@@ -245,7 +245,6 @@ local NavLayout = Instance.new("UIListLayout", NavContainer)
 NavLayout.Padding = UDim.new(0, 4)
 NavLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
--- 右侧内容区
 local ContentFrame = Instance.new("Frame")
 ContentFrame.Size = UDim2.new(1, -136, 1, -50)
 ContentFrame.Position = UDim2.fromOffset(128, 40)
@@ -278,17 +277,10 @@ local function CreatePage(name)
 end
 
 local function SwitchPage(name)
-    for pName, pFrame in pairs(Pages) do
-        pFrame.Visible = (pName == name)
-    end
+    for pName, pFrame in pairs(Pages) do pFrame.Visible = (pName == name) end
     for bName, btn in pairs(NavButtons) do
-        if bName == name then
-            btn.BackgroundColor3 = Colors.Panel
-            btn.TextColor3 = Colors.AccentBlue
-        else
-            btn.BackgroundColor3 = Colors.Sidebar
-            btn.TextColor3 = Colors.TextLight
-        end
+        btn.BackgroundColor3 = (bName == name) and Colors.Panel or Colors.Sidebar
+        btn.TextColor3 = (bName == name) and Colors.AccentBlue or Colors.TextLight
     end
 end
 
@@ -374,6 +366,21 @@ local function AddCard(parent, text, toggleKey)
             TweenService:Create(knob, TweenInfo.new(0.2), {Position = UDim2.fromOffset(2, 2)}):Play()
         end
     end)
+end
+
+local function AddActionButton(parent, text, callback)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 40)
+    btn.BackgroundColor3 = Colors.AccentBlue
+    btn.BorderSizePixel = 0
+    btn.Text = text
+    btn.TextColor3 = Colors.Panel
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 13
+    btn.ZIndex = 3
+    btn.Parent = parent
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+    btn.MouseButton1Click:Connect(callback)
 end
 
 local function AddMultiSelectDropdown(parent, titleText, options, configTable)
@@ -505,10 +512,98 @@ local page_Main = CreatePage("主要")
 AddCard(page_Main, "无限耐久", "InfiniteStamina")
 AddCard(page_Main, "无限饥饿", "InfiniteHunger")
 
--- 默认打开视觉
+-- 加入诊断按钮
+AddActionButton(page_Main, "运行深度诊断 (看控制台)", function()
+    -- 诊断代码块
+    local TAG = "[DIAG]"
+    local function log(...) print(TAG, ...) end
+
+    local function dumpAttributes(obj, label)
+        log("==== ATTRIBUTES:", label, "====")
+        local ok, attrs = pcall(function() return obj:GetAttributes() end)
+        if not ok or not attrs then log("  (无法读取)"); return end
+        local count = 0
+        for k, v in pairs(attrs) do
+            log("  ATTR", k, "=", tostring(v), typeof(v))
+            count = count + 1
+        end
+        if count == 0 then log("  (空)") end
+    end
+
+    local function dumpChildren(obj, label)
+        log("==== CHILDREN:", label, "====")
+        local ok, kids = pcall(function() return obj:GetChildren() end)
+        if not ok or not kids then log("  (无法读取)"); return end
+        local count = 0
+        for _, c in ipairs(kids) do
+            local extra = ""
+            if c:IsA("ValueBase") then extra = "  VALUE=" .. tostring(c.Value)
+            elseif c:IsA("LocalScript") or c:IsA("Script") then extra = "  DISABLED=" .. tostring(c.Disabled) end
+            log("  ", c.ClassName, c.Name, extra)
+            count = count + 1
+        end
+        if count == 0 then log("  (空)") end
+    end
+
+    local function dumpPlayerGui()
+        log("==== PLAYER GUI 脚本 ====")
+        local pg = LP:FindFirstChild("PlayerGui")
+        if not pg then log("  (无 PlayerGui)"); return end
+        local function walk(node, depth)
+            if depth > 4 then return end
+            for _, c in ipairs(node:GetChildren()) do
+                if c:IsA("LocalScript") then
+                    log(string.rep("  ", depth), "LOCALSCRIPT", c:GetFullName(), "Disabled=", c.Disabled)
+                end
+                walk(c, depth + 1)
+            end
+        end
+        pcall(walk, pg, 1)
+    end
+
+    local hooked = {}
+    local function hookRemotes(root, label)
+        log("==== REMOTES:", label, "====")
+        local function scan(node, depth)
+            if depth > 3 then return end
+            for _, c in ipairs(node:GetChildren()) do
+                if c:IsA("RemoteEvent") and not hooked[c] then
+                    hooked[c] = true
+                    log("  HOOK", c:GetFullName())
+                    pcall(function()
+                        c.OnClientEvent:Connect(function(...)
+                            local args = {...}
+                            local parts = {}
+                            for i = 1, math.min(#args, 6) do parts[i] = tostring(args[i]) end
+                            log("  REMOTE->", c.Name, "args:", table.concat(parts, ", "))
+                        end)
+                    end)
+                end
+                scan(c, depth + 1)
+            end
+        end
+        pcall(scan, root, 1)
+    end
+
+    log("================ SCAN START ================")
+    dumpAttributes(LP, "LocalPlayer")
+    dumpChildren(LP, "LocalPlayer")
+    if LP.Character then
+        dumpAttributes(LP.Character, "Character")
+        dumpChildren(LP.Character, "Character")
+        local hum = LP.Character:FindFirstChildOfClass("Humanoid")
+        if hum then dumpAttributes(hum, "Humanoid") end
+    else
+        log("(角色尚未加载)")
+    end
+    dumpPlayerGui()
+    hookRemotes(ReplicatedStorage, "ReplicatedStorage")
+    hookRemotes(workspace, "Workspace")
+    log("================ SCAN END ================")
+end)
+
 SwitchPage("视觉")
 
--- 动画控制
 local openTweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 local closeTweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
 local function ToggleUI(openState)
@@ -538,46 +633,48 @@ CloseBtn.MouseButton1Click:Connect(function() ToggleUI(false) end)
 
 
 -- ==========================================
--- 4. 核心：属性阈值锁值
+-- 4. 核心：属性与 ValueBase 阈值锁值
 -- ==========================================
 local function StartAttributeLock()
     task.spawn(function()
-        while task.wait(0.5) do -- 低频写入
+        while task.wait(0.5) do
             pcall(function()
                 local p = LP
                 local char = p.Character
                 
-                -- 检查饥饿
-                if Config.InfiniteHunger then
-                    local keys = {"Hunger", "Food", "Thirst", "Satiety", "饥饿"}
+                -- 锁定目标的函数
+                local function checkAndLock(obj, keys, targetVal)
+                    if not obj then return end
                     for _, k in ipairs(keys) do
-                        local val = p:GetAttribute(k)
-                        if not val and char then val = char:GetAttribute(k) end
-                        
-                        if type(val) == "number" then
-                            -- 偏差超过 5 才强制设为 100
-                            if math.abs(val - 100) > 5 then
-                                if p:GetAttribute(k) then p:SetAttribute(k, 100)
-                                elseif char then char:SetAttribute(k, 100) end
+                        local val = obj:GetAttribute(k)
+                        if type(val) == "number" and math.abs(val - targetVal) > 5 then
+                            obj:SetAttribute(k, targetVal)
+                        end
+                    end
+                    for _, child in ipairs(obj:GetChildren()) do
+                        if child:IsA("NumberValue") or child:IsA("IntValue") then
+                            local lname = child.Name:lower()
+                            for _, k in ipairs(keys) do
+                                if lname == k:lower() then
+                                    if math.abs(child.Value - targetVal) > 5 then
+                                        child.Value = targetVal
+                                    end
+                                end
                             end
                         end
                     end
                 end
+
+                if Config.InfiniteHunger then
+                    local keys = {"Hunger", "Food", "Thirst", "Satiety", "饥饿", "饱食"}
+                    checkAndLock(p, keys, 100)
+                    checkAndLock(char, keys, 100)
+                end
                 
-                -- 检查耐久
                 if Config.InfiniteStamina then
-                    local keys = {"Stamina", "Energy", "Endurance", "耐力", "体力"}
-                    for _, k in ipairs(keys) do
-                        local val = p:GetAttribute(k)
-                        if not val and char then val = char:GetAttribute(k) end
-                        
-                        if type(val) == "number" then
-                            if math.abs(val - 100) > 5 then
-                                if p:GetAttribute(k) then p:SetAttribute(k, 100)
-                                elseif char then char:SetAttribute(k, 100) end
-                            end
-                        end
-                    end
+                    local keys = {"Stamina", "Energy", "Endurance", "耐力", "体力", "精力"}
+                    checkAndLock(p, keys, 100)
+                    checkAndLock(char, keys, 100)
                 end
             end)
         end
@@ -716,4 +813,4 @@ task.spawn(function()
     end
 end)
 
-print("[DeepSeek] 主要功能与属性锁值加载完毕")
+print("[DeepSeek] 主要功能、诊断与底层锁值加载完毕")
