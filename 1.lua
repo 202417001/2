@@ -1,5 +1,5 @@
 -- ============================================
--- DeepSeek Studio (极简稳如老狗版)
+-- DeepSeek Studio (最终防闪退 · UI必出稳定版)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -9,12 +9,9 @@ local UIS = game:GetService("UserInputService")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- 1. 安全容器探测 (防报错)
+-- 1. 安全容器探测
 local container = game:GetService("CoreGui")
-if gethui then 
-    local ok, res = pcall(gethui)
-    if ok and res then container = res end 
-end
+pcall(function() if gethui then container = gethui() end end)
 
 local mainGui = Instance.new("ScreenGui")
 mainGui.Name = tostring(math.random(100000, 999999))
@@ -45,79 +42,13 @@ local Colors = {
     ToggleOff = Color3.fromRGB(200, 200, 200),
 }
 
--- 2. 高亮池 & FOV
-local HIGHLIGHT_POOL_SIZE = 20
-local highlightPool = {}
-local hlFolder = Instance.new("Folder")
-hlFolder.Name = tostring(math.random(10000, 99999))
-pcall(function() hlFolder.Parent = container end)
-if not hlFolder.Parent then hlFolder.Parent = workspace end
-
-for i = 1, HIGHLIGHT_POOL_SIZE do
-    local hl = Instance.new("Highlight")
-    hl.Name = tostring(math.random(10000, 99999))
-    hl.DepthMode = Enum.HighlightDepthMode.Occluded
-    hl.OutlineTransparency = 1
-    hl.FillTransparency = 0.5
-    hl.Adornee = nil
-    hl.Parent = hlFolder
-    table.insert(highlightPool, hl)
-end
-
-local fovCircle = nil
-pcall(function()
-    if Drawing then
-        fovCircle = Drawing.new("Circle")
-        fovCircle.Thickness = 1.5
-        fovCircle.Color = Color3.fromRGB(0, 255, 150)
-        fovCircle.Transparency = 0.8
-        fovCircle.Filled = false
-        fovCircle.Visible = false
-    end
-end)
-
--- 3. 角色逻辑
-local RoleDict = {
-    ["Civilian"] = "平民", ["Police"] = "警察", ["Medical"] = "医生",
-    ["Chef"] = "厨师", ["Delivery"] = "快递员", ["Farmer"] = "农夫",
-    ["Fire"] = "消防员", ["Prisoner"] = "囚犯", ["Road Service"] = "其他",
-    ["Transit"] = "其他", ["Neutral"] = "其他", ["???"] = "其他"
-}
-
-local function getRoleName(plr)
-    local rawRole = nil
-    local roleAttr = plr:GetAttribute("Role") or plr:GetAttribute("RoleId")
-    if roleAttr then rawRole = tostring(roleAttr) end
-    if not rawRole and plr.Team and plr.Team.Name ~= "" then rawRole = plr.Team.Name end
-    if rawRole then
-        if RoleDict[rawRole] then return RoleDict[rawRole] end
-        local lr = rawRole:lower()
-        if lr:find("police") then return "警察"
-        elseif lr:find("civilian") then return "平民"
-        elseif lr:find("medical") or lr:find("doctor") then return "医生"
-        elseif lr:find("fire") then return "消防员"
-        end
-        return "其他"
-    end
-    return "平民"
-end
-
-local function getRoleColor(roleName)
-    if roleName == "警察" then return Color3.fromRGB(0, 85, 255)
-    elseif roleName == "医生" then return Color3.fromRGB(255, 30, 30)
-    elseif roleName == "消防员" then return Color3.fromRGB(255, 140, 0)
-    elseif roleName == "平民" then return Color3.fromRGB(255, 255, 255)
-    elseif roleName == "农夫" then return Color3.fromRGB(60, 255, 60)
-    elseif roleName == "囚犯" then return Color3.fromRGB(255, 100, 0)
-    end
-    return Color3.fromRGB(200, 200, 200)
-end
-
--- 4. UI 构建
+-- ==========================================
+-- UI 构建 (优先执行，保证弹出)
+-- ==========================================
 local Main = Instance.new("Frame")
 Main.AnchorPoint = Vector2.new(0.5, 0)
 Main.Position = UDim2.new(0.5, 0, 0, 10)
-Main.Size = UDim2.fromOffset(110, 32) -- 直接显示胶囊，防初始看不见
+Main.Size = UDim2.fromOffset(110, 32) -- 初始胶囊
 Main.BackgroundColor3 = Colors.Bg
 Main.BorderSizePixel = 0
 Main.ClipsDescendants = true
@@ -146,7 +77,6 @@ MainContent.BackgroundTransparency = 1
 MainContent.Visible = false
 MainContent.Parent = Main
 
--- 顶部/侧边导航
 local Title = Instance.new("TextLabel")
 Title.Size = UDim2.fromOffset(200, 30)
 Title.Position = UDim2.fromOffset(16, 5)
@@ -235,7 +165,6 @@ local function CreateNavBtn(name)
     NavButtons[name] = btn
 end
 
--- 控件生成
 local function AddCard(parent, text, toggleKey)
     local card = Instance.new("Frame")
     card.Size = UDim2.new(1, 0, 0, 44)
@@ -367,18 +296,14 @@ local function AddSlider(parent, text, minVal, maxVal, defaultVal, callback)
     end)
 end
 
--- 构建页面
 CreateNavBtn("视觉")
 CreateNavBtn("战斗")
-
 local page_Visual = CreatePage("视觉")
 AddCard(page_Visual, "玩家透视", "ESP")
 AddCard(page_Visual, "人物高亮", "Highlight")
-
 local page_Combat = CreatePage("战斗")
 AddCard(page_Combat, "静默自瞄", "SilentAim")
 AddSlider(page_Combat, "瞄准范围 (FOV)", 50, 600, Config.FOV, function(v) Config.FOV = v end)
-
 SwitchPage("视觉")
 
 local isOpen = false
@@ -391,42 +316,46 @@ local function ToggleUI(openState)
         MainContent.Visible = true
         CapsuleText.Visible = false
         CapsuleBtn.Visible = false
-        TweenService:Create(Main, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = UDim2.fromOffset(480, 320), Position = UDim2.new(0.5, 0, 0, 40)}):Play()
-        TweenService:Create(MainCorner, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {CornerRadius = UDim.new(0, 12)}):Play()
-        task.wait(0.5)
+        TweenService:Create(Main, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {Size = UDim2.fromOffset(480, 320), Position = UDim2.new(0.5, 0, 0, 40)}):Play()
+        TweenService:Create(MainCorner, TweenInfo.new(0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {CornerRadius = UDim.new(0, 12)}):Play()
+        task.wait(0.4)
     else
         MainContent.Visible = false
-        TweenService:Create(Main, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Size = UDim2.fromOffset(110, 32), Position = UDim2.new(0.5, 0, 0, 10)}):Play()
-        TweenService:Create(MainCorner, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {CornerRadius = UDim.new(1, 0)}):Play()
-        task.wait(0.4)
+        TweenService:Create(Main, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Size = UDim2.fromOffset(110, 32), Position = UDim2.new(0.5, 0, 0, 10)}):Play()
+        TweenService:Create(MainCorner, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {CornerRadius = UDim.new(1, 0)}):Play()
+        task.wait(0.3)
         CapsuleText.Visible = true
         CapsuleBtn.Visible = true
     end
     isAnimating = false
 end
-
 CapsuleBtn.MouseButton1Click:Connect(function() ToggleUI(true) end)
 CloseBtn.MouseButton1Click:Connect(function() ToggleUI(false) end)
 
--- 5. 静默逻辑 (安全防御版)
+-- ==========================================
+-- 核心：防闪退极稳静默自瞄
+-- ==========================================
 local cachedTarget = nil
 local seatCooldown = false
 local lastSitState = false
 
+-- 监听上下车
 task.spawn(function()
     while task.wait(0.1) do
-        local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+        local char = LP.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
         local isSitting = hum and hum.Sit
         if isSitting ~= lastSitState then
             lastSitState = isSitting
             seatCooldown = true
-            cachedTarget = nil
-            task.wait(1.0)
+            cachedTarget = nil 
+            task.wait(1.0) 
             seatCooldown = false
         end
     end
 end)
 
+-- 找目标
 task.spawn(function()
     while task.wait(0.05) do
         if Config.SilentAim and not seatCooldown then
@@ -462,26 +391,21 @@ pcall(function()
         local oldNamecall
         oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
             local method = getnamecallmethod()
+            
+            -- 极度精简的拦截
             if not checkcaller() and Config.SilentAim and cachedTarget and not seatCooldown then
-                local success, shouldModify, newOrigin, newDir, newParams = pcall(function()
-                    local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-                    if not hum or hum.Sit then return false end
-                    
+                local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
+                if hum and not hum.Sit then
                     if method == "Raycast" then
                         local args = {...}
-                        local origin, direction, params = args[1], args[2], args[3]
-                        if typeof(origin) == "Vector3" and typeof(direction) == "Vector3" and typeof(params) == "RaycastParams" then
+                        if typeof(args[1]) == "Vector3" and typeof(args[2]) == "Vector3" then
                             local myHRP = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-                            if myHRP and (origin - myHRP.Position).Magnitude < 15 then
-                                local newDir = (cachedTarget.Position - origin).Unit * 9999
-                                return true, origin, newDir, params
+                            if myHRP and (args[1] - myHRP.Position).Magnitude < 15 then
+                                args[2] = (cachedTarget.Position - args[1]).Unit * 9999
+                                return oldNamecall(self, unpack(args))
                             end
                         end
                     end
-                    return false
-                end)
-                if success and shouldModify then
-                    return oldNamecall(self, newOrigin, newDir, newParams)
                 end
             end
             return oldNamecall(self, ...)
@@ -489,33 +413,25 @@ pcall(function()
     end
 end)
 
-RunService.RenderStepped:Connect(function()
-    if fovCircle and Config.SilentAim then
-        fovCircle.Visible = true
-        fovCircle.Position = Camera.ViewportSize / 2
-        fovCircle.Radius = Config.FOV
-    elseif fovCircle then
-        fovCircle.Visible = false
-    end
-end)
-
--- 6. 透视渲染
+-- 透视渲染
 local espCache = {}
 local function initPlayer(plr)
     if plr == LP or espCache[plr] then return end
-    local data = {}
     local box = Instance.new("Frame"); box.BackgroundTransparency = 1; box.BorderSizePixel = 1; box.BorderColor3 = Color3.fromRGB(0, 255, 100); box.Visible = false; box.Parent = mainGui
     local nameTxt = Instance.new("TextLabel"); nameTxt.BackgroundTransparency = 1; nameTxt.TextColor3 = Color3.new(1, 1, 1); nameTxt.TextStrokeTransparency = 0; nameTxt.Font = Enum.Font.SourceSansBold; nameTxt.TextSize = 14; nameTxt.Visible = false; nameTxt.Parent = mainGui
     local distTxt = Instance.new("TextLabel"); distTxt.BackgroundTransparency = 1; distTxt.TextColor3 = Color3.fromRGB(200, 200, 200); distTxt.TextStrokeTransparency = 0; distTxt.Font = Enum.Font.SourceSansBold; distTxt.TextSize = 12; distTxt.Visible = false; distTxt.Parent = mainGui
-    data.box = box; data.nameTxt = nameTxt; data.distTxt = distTxt
-    espCache[plr] = data
+    espCache[plr] = { box = box, nameTxt = nameTxt, distTxt = distTxt }
 end
-
 for _, p in ipairs(Players:GetPlayers()) do initPlayer(p) end
 Players.PlayerAdded:Connect(initPlayer)
+Players.PlayerRemoving:Connect(function(plr) 
+    if espCache[plr] then 
+        espCache[plr].box:Destroy(); espCache[plr].nameTxt:Destroy(); espCache[plr].distTxt:Destroy(); espCache[plr] = nil 
+    end 
+end)
 
 task.spawn(function()
-    while task.wait(0.01) do 
+    while task.wait(0.02) do 
         if not Config.ESP then
             for _, d in pairs(espCache) do d.box.Visible = false; d.nameTxt.Visible = false; d.distTxt.Visible = false end
             continue
@@ -527,15 +443,12 @@ task.spawn(function()
                     local head = plr.Character:FindFirstChild("Head")
                     local hum = plr.Character:FindFirstChildOfClass("Humanoid")
                     if hrp and head and hum and hum.Health > 0 then
-                        local headPos, onScreen1 = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
-                        local footPos, onScreen2 = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
-                        if onScreen1 and onScreen2 then
+                        local headPos, onScreen = Camera:WorldToViewportPoint(head.Position)
+                        if onScreen then
                             local distance = math.floor((Camera.CFrame.Position - hrp.Position).Magnitude / 3)
-                            local boxHeight = math.abs(footPos.Y - headPos.Y)
-                            local centerY = (headPos.Y + footPos.Y) / 2
-                            data.box.Visible = true; data.box.AnchorPoint = Vector2.new(0.5, 0.5); data.box.Size = UDim2.fromOffset(boxHeight * 0.65, boxHeight); data.box.Position = UDim2.fromOffset(headPos.X, centerY)
-                            data.nameTxt.Visible = true; data.nameTxt.AnchorPoint = Vector2.new(0.5, 1); data.nameTxt.Size = UDim2.fromOffset(200, 20); data.nameTxt.Position = UDim2.fromOffset(headPos.X, headPos.Y - 2); data.nameTxt.Text = "[" .. getRoleName(plr) .. "] " .. plr.Name; data.nameTxt.TextColor3 = getRoleColor(getRoleName(plr))
-                            data.distTxt.Visible = true; data.distTxt.AnchorPoint = Vector2.new(0.5, 0); data.distTxt.Size = UDim2.fromOffset(100, 20); data.distTxt.Position = UDim2.fromOffset(headPos.X, footPos.Y + 2); data.distTxt.Text = tostring(distance) .. "m"
+                            data.box.Visible = true; data.box.Size = UDim2.fromOffset(40, 60); data.box.Position = UDim2.fromOffset(headPos.X - 20, headPos.Y + 10)
+                            data.nameTxt.Visible = true; data.nameTxt.Text = plr.Name; data.nameTxt.Position = UDim2.fromOffset(headPos.X, headPos.Y - 10)
+                            data.distTxt.Visible = true; data.distTxt.Text = tostring(distance) .. "m"; data.distTxt.Position = UDim2.fromOffset(headPos.X, headPos.Y + 75)
                         else
                             data.box.Visible = false; data.nameTxt.Visible = false; data.distTxt.Visible = false
                         end
@@ -550,4 +463,4 @@ task.spawn(function()
     end
 end)
 
-print("[DeepSeek] 极简稳定版加载完毕")
+print("[DeepSeek] 最终极简防闪退版加载完毕")
