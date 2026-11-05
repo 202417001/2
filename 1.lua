@@ -1,5 +1,5 @@
 -- ============================================
--- DeepSeek UI + 终极隔离级透视 (带角色识别)
+-- DeepSeek UI + 终极隔离级透视 (完美贴合 + 汉化)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -8,9 +8,8 @@ local TweenService = game:GetService("TweenService")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- 1. 确认容器 (只取一次，局部变量)
+-- 1. 确认容器
 local container = (gethui and gethui()) or game:GetService("CoreGui")
-
 local mainGui = Instance.new("ScreenGui")
 mainGui.Name = tostring(math.random(100000, 999999))
 mainGui.ResetOnSpawn = false
@@ -19,8 +18,14 @@ mainGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 mainGui.Parent = container
 
 -- 2. 配置项
-local Config = {
-    ESP = false
+local Config = { ESP = false }
+
+-- 职业汉化字典
+local RoleDict = {
+    ["Civilian"] = "平民", ["Police"] = "警察", ["Medical"] = "医生",
+    ["Chef"] = "厨师", ["Delivery"] = "快递员", ["Farmer"] = "农夫",
+    ["Fire"] = "消防员", ["Prisoner"] = "囚犯", ["Road Service"] = "路政",
+    ["Transit"] = "公交司机", ["Neutral"] = "无", ["???"] = "未知"
 }
 
 -- 3. DeepSeek 胶囊面板
@@ -80,7 +85,6 @@ closeBtn.ZIndex = 4
 closeBtn.Visible = false
 closeBtn.Parent = mainFrame
 
--- UI 开关组件
 local function addToggle(text, key)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(1, 0, 0, 36)
@@ -143,7 +147,6 @@ end
 
 addToggle("开启深度透视", "ESP")
 
--- 展开/收起动画
 local openTweenInfo = TweenInfo.new(0.45, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 local closeTweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
 
@@ -173,58 +176,64 @@ openBtn.MouseButton1Click:Connect(function() toggleUI(true) end)
 closeBtn.MouseButton1Click:Connect(function() toggleUI(false) end)
 
 -- ==========================================
--- 4. 角色读取与颜色适配逻辑
+-- 4. 角色读取与汉化
 -- ==========================================
-local function getRoleInfo(plr)
-    -- 1. 属性读取
+local function getRoleName(plr)
+    local rawRole = nil
+    -- 1. 属性
     local roleAttr = plr:GetAttribute("Role") or plr:GetAttribute("RoleId")
-    if roleAttr then return tostring(roleAttr) end
-
-    -- 2. Team 读取
-    if plr.Team and plr.Team.Name ~= "" and plr.Team.Name ~= "Neutral" and plr.Team.Name ~= "???" then
-        return plr.Team.Name
-    end
-
-    -- 3. Player 下的 StringValue / IntValue
-    for _, v in ipairs(plr:GetChildren()) do
-        if (v:IsA("StringValue") or v:IsA("IntValue")) and (v.Name:lower():find("role") or v.Name:lower():find("job") or v.Name:lower():find("team")) then
-            return tostring(v.Value)
+    if roleAttr then rawRole = tostring(roleAttr) end
+    -- 2. Team
+    if not rawRole and plr.Team and plr.Team.Name ~= "" then rawRole = plr.Team.Name end
+    -- 3. Player 下的子对象
+    if not rawRole then
+        for _, v in ipairs(plr:GetChildren()) do
+            if (v:IsA("StringValue") or v:IsA("IntValue")) and (v.Name:lower():find("role") or v.Name:lower():find("job") or v.Name:lower():find("team")) then
+                rawRole = tostring(v.Value)
+                break
+            end
         end
     end
-
-    -- 4. Character 里的标记或工具
-    if plr.Character then
+    -- 4. Character 下的子对象
+    if not rawRole and plr.Character then
         for _, v in ipairs(plr.Character:GetChildren()) do
             if (v:IsA("StringValue") or v:IsA("IntValue")) and (v.Name:lower():find("role") or v.Name:lower():find("job")) then
-                return tostring(v.Value)
+                rawRole = tostring(v.Value)
+                break
             end
         end
     end
 
-    return nil
+    -- 汉化处理
+    if rawRole then
+        if RoleDict[rawRole] then return RoleDict[rawRole] end
+        -- 模糊匹配
+        local lr = rawRole:lower()
+        if lr:find("police") then return "警察"
+        elseif lr:find("civilian") then return "平民"
+        elseif lr:find("medical") or lr:find("doctor") then return "医生"
+        elseif lr:find("fire") then return "消防员"
+        elseif lr:find("chef") then return "厨师"
+        end
+        return rawRole
+    end
+    
+    return "平民"
 end
 
 local function getRoleColor(roleName)
-    if not roleName then return Color3.fromRGB(255, 255, 255) end -- 平民白
-    local r = roleName:lower()
-    
-    if r:find("police") or r:find("cop") or r:find("警察") then 
-        return Color3.fromRGB(255, 60, 60) -- 警察红
-    elseif r:find("farmer") or r:find("农夫") or r:find("农民") then 
-        return Color3.fromRGB(60, 255, 60) -- 农民绿
-    elseif r:find("medical") or r:find("doctor") or r:find("医生") then 
-        return Color3.fromRGB(60, 255, 255) -- 医生青
-    elseif r:find("fire") or r:find("消防") then 
-        return Color3.fromRGB(255, 150, 50) -- 消防橙
-    elseif r:find("prisoner") or r:find("囚犯") then 
-        return Color3.fromRGB(255, 100, 0) -- 囚犯橙红
+    if roleName == "警察" then return Color3.fromRGB(255, 60, 60)
+    elseif roleName == "平民" then return Color3.fromRGB(255, 255, 255)
+    elseif roleName == "医生" then return Color3.fromRGB(60, 255, 255)
+    elseif roleName == "消防员" then return Color3.fromRGB(255, 150, 50)
+    elseif roleName == "农夫" then return Color3.fromRGB(60, 255, 60)
+    elseif roleName == "囚犯" then return Color3.fromRGB(255, 100, 0)
     end
-    
-    return Color3.fromRGB(220, 220, 220) -- 其他未知职业浅灰
+    return Color3.fromRGB(200, 200, 200)
 end
 
 -- ==========================================
--- 5. 透视核心逻辑 (统一屏幕空间)
+-- 5. 透视核心逻辑 (贴合修正)
 -- ==========================================
 local espCache = {}
 
@@ -232,8 +241,6 @@ local function initPlayer(plr)
     if plr == LP or espCache[plr] then return end
     
     local data = {}
-    
-    -- 空心方框
     local box = Instance.new("Frame")
     box.Name = tostring(math.random(10000, 99999))
     box.BackgroundTransparency = 1
@@ -242,7 +249,6 @@ local function initPlayer(plr)
     box.Visible = false
     box.Parent = mainGui
     
-    -- 名字标签 (带职业)
     local nameTxt = Instance.new("TextLabel")
     nameTxt.Name = tostring(math.random(10000, 99999))
     nameTxt.BackgroundTransparency = 1
@@ -253,7 +259,6 @@ local function initPlayer(plr)
     nameTxt.Visible = false
     nameTxt.Parent = mainGui
     
-    -- 距离标签
     local distTxt = Instance.new("TextLabel")
     distTxt.Name = tostring(math.random(10000, 99999))
     distTxt.BackgroundTransparency = 1
@@ -267,7 +272,6 @@ local function initPlayer(plr)
     data.box = box
     data.nameTxt = nameTxt
     data.distTxt = distTxt
-    
     espCache[plr] = data
 end
 
@@ -285,7 +289,7 @@ Players.PlayerRemoving:Connect(function(plr)
 end)
 
 -- ==========================================
--- 6. 10毫秒渲染更新循环
+-- 6. 10毫秒渲染循环 (双点投影精准贴合)
 -- ==========================================
 task.spawn(function()
     while task.wait(0.01) do 
@@ -304,46 +308,50 @@ task.spawn(function()
                 end
                 
                 local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                local head = plr.Character:FindFirstChild("Head")
                 local hum = plr.Character:FindFirstChildOfClass("Humanoid")
                 
-                if not hrp or not hum or hum.Health <= 0 then
+                if not hrp or not head or not hum or hum.Health <= 0 then
                     data.box.Visible = false; data.nameTxt.Visible = false; data.distTxt.Visible = false
                     return
                 end
                 
-                local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position + Vector3.new(0, 2, 0))
+                -- 【核心优化 1】双点投影：分别获取头顶和脚底的屏幕坐标
+                -- 头部坐标（向上偏一点）
+                local headPos, headOnScreen = Camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.5, 0))
+                -- 脚底坐标（HumanoidRootPart 是腰，向下减3格大概是脚底）
+                local footPos, footOnScreen = Camera:WorldToViewportPoint(hrp.Position - Vector3.new(0, 3, 0))
                 
-                if onScreen then
+                -- 只有头和脚都在屏幕内才渲染
+                if headOnScreen and footOnScreen then
+                    -- 计算距离
                     local distance = math.floor((Camera.CFrame.Position - hrp.Position).Magnitude / 3)
-                    local boxHeight = math.clamp(6000 / distance, 30, 100)
-                    local boxWidth = boxHeight * 0.6
                     
-                    -- 1. 更新框
+                    -- 计算 2D 方框的宽高
+                    local boxHeight = math.abs(footPos.Y - headPos.Y)
+                    local boxWidth = boxHeight * 0.65
+                    local centerY = (headPos.Y + footPos.Y) / 2
+                    
+                    -- 更新方框 (居中放置)
                     data.box.Visible = true
                     data.box.AnchorPoint = Vector2.new(0.5, 0.5)
                     data.box.Size = UDim2.fromOffset(boxWidth, boxHeight)
-                    data.box.Position = UDim2.fromOffset(pos.X, pos.Y)
+                    data.box.Position = UDim2.fromOffset(headPos.X, centerY)
                     
-                    -- 2. 更新角色与名字 (只改属性和文本)
-                    local role = getRoleInfo(plr)
+                    -- 【核心优化 2】名字死死贴着头顶
+                    local roleName = getRoleName(plr)
                     data.nameTxt.Visible = true
                     data.nameTxt.AnchorPoint = Vector2.new(0.5, 1)
                     data.nameTxt.Size = UDim2.fromOffset(200, 20)
-                    data.nameTxt.Position = UDim2.fromOffset(pos.X, pos.Y - (boxHeight / 2) - 2)
+                    data.nameTxt.Position = UDim2.fromOffset(headPos.X, headPos.Y - 2)
+                    data.nameTxt.Text = "[" .. roleName .. "] " .. plr.Name
+                    data.nameTxt.TextColor3 = getRoleColor(roleName)
                     
-                    if role then
-                        data.nameTxt.Text = "[" .. role .. "] " .. plr.Name
-                        data.nameTxt.TextColor3 = getRoleColor(role)
-                    else
-                        data.nameTxt.Text = plr.Name
-                        data.nameTxt.TextColor3 = Color3.new(1, 1, 1) -- 默认白
-                    end
-                    
-                    -- 3. 更新距离
+                    -- 【核心优化 3】距离死死贴着脚底
                     data.distTxt.Visible = true
                     data.distTxt.AnchorPoint = Vector2.new(0.5, 0)
                     data.distTxt.Size = UDim2.fromOffset(100, 20)
-                    data.distTxt.Position = UDim2.fromOffset(pos.X, pos.Y + (boxHeight / 2) + 2)
+                    data.distTxt.Position = UDim2.fromOffset(headPos.X, footPos.Y + 2)
                     data.distTxt.Text = tostring(distance) .. "m"
                 else
                     data.box.Visible = false; data.nameTxt.Visible = false; data.distTxt.Visible = false
@@ -353,4 +361,4 @@ task.spawn(function()
     end
 end)
 
-print("[DeepSeek] 角色识别透视已加载")
+print("[DeepSeek] 完美贴合 + 汉化透视已加载")
