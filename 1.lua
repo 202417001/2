@@ -1,5 +1,5 @@
 -- ============================================
--- DeepSeek Studio (四角汇聚启动特效 · 战斗版)
+-- DeepSeek Studio (星尘汇聚启动特效 · 战斗版)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -124,17 +124,17 @@ local function isRoleVisible(roleName)
 end
 
 -- ==========================================
--- 3. Fluent UI
+-- 3. Fluent UI (初始隐藏，准备播动画)
 -- ==========================================
 local Main = Instance.new("Frame")
 Main.AnchorPoint = Vector2.new(0.5, 0)
 Main.Position = UDim2.new(0.5, 0, 0, 10)
-Main.Size = UDim2.fromOffset(0, 0) -- 初始为 0 用于启动动画
+Main.Size = UDim2.fromOffset(0, 0)
 Main.BackgroundColor3 = Colors.Bg
 Main.BorderSizePixel = 0
 Main.ClipsDescendants = true
 Main.Parent = mainGui
-Main.Visible = false
+Main.Visible = false -- 初始隐藏
 local MainCorner = Instance.new("UICorner", Main)
 MainCorner.CornerRadius = UDim.new(1, 0)
 local MainStroke = Instance.new("UIStroke", Main)
@@ -197,7 +197,6 @@ CloseBtn.TextSize = 20
 CloseBtn.ZIndex = 10
 CloseBtn.Parent = TopBar
 
--- 导航
 local Sidebar = Instance.new("Frame")
 Sidebar.Size = UDim2.fromOffset(120, 250)
 Sidebar.Position = UDim2.fromOffset(8, 40)
@@ -304,7 +303,7 @@ local function CreateNavBtn(name)
     NavButtons[name] = btn
 end
 
--- 组件
+-- 组件生成器
 local function AddCard(parent, text, toggleKey)
     local card = Instance.new("Frame")
     card.Size = UDim2.new(1, 0, 0, 44)
@@ -564,9 +563,7 @@ local function AddMultiSelectDropdown(parent, titleText, options, configTable)
     end
 end
 
--- ==========================================
 -- 构建页面
--- ==========================================
 CreateNavBtn("视觉")
 CreateNavBtn("战斗")
 
@@ -613,58 +610,80 @@ CapsuleBtn.MouseButton1Click:Connect(function() ToggleUI(true) end)
 CloseBtn.MouseButton1Click:Connect(function() ToggleUI(false) end)
 
 -- ==========================================
--- 启动动画 (四角汇聚)
+-- 启动动画 (星尘汇聚)
 -- ==========================================
 local function PlayIntroAnimation()
-    local points = {
-        UDim2.new(0, 0, 0, 0),    -- 左上
-        UDim2.new(1, 0, 0, 0),    -- 右上
-        UDim2.new(0, 0, 1, 0),    -- 左下
-        UDim2.new(1, 0, 1, 0)     -- 右下
-    }
+    local particles = {}
+    local PARTICLE_COUNT = 60
     
-    local dots = {}
+    -- 目标位置 (屏幕正上方偏下一点点，即胶囊的位置)
+    local targetX = 0.5
+    local targetY = 0.05 
     
-    for i = 1, 4 do
+    for i = 1, PARTICLE_COUNT do
         local dot = Instance.new("Frame")
-        dot.Size = UDim2.fromOffset(6, 6)
-        dot.Position = points[i]
         dot.BackgroundColor3 = Color3.new(1, 1, 1)
         dot.BorderSizePixel = 0
+        dot.ZIndex = 100
         dot.Parent = mainGui
+        
+        local size = math.random(2, 5)
+        dot.Size = UDim2.fromOffset(size, size)
         Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
-        table.insert(dots, dot)
         
-        -- 发光描边
-        local stroke = Instance.new("UIStroke", dot)
-        stroke.Color = Color3.new(1, 1, 1)
-        stroke.Thickness = 2
-        stroke.Transparency = 0.5
+        local startX, startY
+        local edge = math.random(1, 3)
         
-        -- 汇聚的 Tween
-        local tweenInfo = TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
-        TweenService:Create(dot, tweenInfo, {
-            Position = UDim2.new(0.5, 0, 0, 26), -- 汇聚到屏幕顶部中央
-            Size = UDim2.fromOffset(12, 12),
-            BackgroundTransparency = 0.5
-        }):Play()
+        if edge == 1 then -- 左边缘
+            startX = 0
+            startY = math.random(0, 100) / 100
+        elseif edge == 2 then -- 右边缘
+            startX = 1
+            startY = math.random(0, 100) / 100
+        else -- 底部
+            startX = math.random(0, 100) / 100
+            startY = 1
+        end
+        
+        dot.Position = UDim2.new(startX, 0, startY, 0)
+        
+        -- 终点稍微散布在目标点周围，制造汇聚的挤压感
+        local endX = targetX + (math.random(-20, 20) / 1000)
+        local endY = targetY + (math.random(-20, 20) / 1000)
+        
+        -- 随机延迟，让它们不是同时到达
+        local delayTime = math.random(0, 30) / 100
+        local travelTime = math.random(30, 60) / 100
+        
+        table.insert(particles, dot)
+        
+        task.delay(delayTime, function()
+            if dot and dot.Parent then
+                local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+                TweenService:Create(dot, tweenInfo, {
+                    Position = UDim2.new(endX, 0, endY, 0),
+                    BackgroundTransparency = 1 -- 到终点时消失
+                }):Play()
+            end
+        end)
     end
     
-    task.delay(0.65, function()
-        -- 销毁汇聚的点
-        for _, dot in ipairs(dots) do
+    -- 大约 1 秒后所有粒子汇聚完毕，胶囊实体化
+    task.delay(1.0, function()
+        for _, dot in ipairs(particles) do
             if dot then dot:Destroy() end
         end
         
-        -- 胶囊弹出
         Main.Visible = true
         Main.Size = UDim2.fromOffset(0, 0)
-        local popInfo = TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        
+        -- 胶囊实体化，使用 Back 缓动（带一点弹簧效果）
+        local popInfo = TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
         TweenService:Create(Main, popInfo, {Size = UDim2.fromOffset(110, 32)}):Play()
     end)
 end
 
--- 启动动画
+-- 启动！
 PlayIntroAnimation()
 
 -- ==========================================
@@ -865,4 +884,4 @@ task.spawn(function()
     end
 end)
 
-print("[DeepSeek] 汇聚特效+战斗杀戮已加载")
+print("[DeepSeek] 星尘汇聚特效+战斗版加载完毕")
