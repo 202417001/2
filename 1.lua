@@ -1,5 +1,5 @@
 -- ============================================
--- DeepSeek Studio (胶囊置顶 · 面板正常居中)
+-- DeepSeek Studio (属性锁值版 · 多页导航)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -20,6 +20,8 @@ mainGui.Parent = container
 local Config = { 
     ESP = false, 
     Highlight = false,
+    InfiniteStamina = false,
+    InfiniteHunger = false,
     Filters = {
         ["平民"] = true, ["警察"] = true, ["医生"] = true,
         ["消防员"] = true, ["厨师"] = true, ["快递员"] = true,
@@ -120,11 +122,11 @@ local function isRoleVisible(roleName)
 end
 
 -- ==========================================
--- 3. Fluent UI (独立位置控制)
+-- 3. Fluent UI 与 导航系统
 -- ==========================================
 local Main = Instance.new("Frame")
 Main.AnchorPoint = Vector2.new(0.5, 0)
-Main.Position = UDim2.new(0.5, 0, 0, 10) -- 初始胶囊在最上方
+Main.Position = UDim2.new(0.5, 0, 0, 10)
 Main.Size = UDim2.fromOffset(110, 32)
 Main.BackgroundColor3 = Colors.Bg
 Main.BorderSizePixel = 0
@@ -192,6 +194,7 @@ CloseBtn.TextSize = 20
 CloseBtn.ZIndex = 10
 CloseBtn.Parent = TopBar
 
+-- 左侧导航
 local Sidebar = Instance.new("Frame")
 Sidebar.Size = UDim2.fromOffset(120, 250)
 Sidebar.Position = UDim2.fromOffset(8, 40)
@@ -234,19 +237,15 @@ UserName.TextXAlignment = Enum.TextXAlignment.Left
 UserName.ZIndex = 3
 UserName.Parent = UserFrame
 
-local NavBtn = Instance.new("TextButton")
-NavBtn.Size = UDim2.new(1, -12, 0, 32)
-NavBtn.Position = UDim2.fromOffset(6, 8)
-NavBtn.BackgroundColor3 = Colors.Panel
-NavBtn.Text = "  视觉"
-NavBtn.TextColor3 = Colors.AccentBlue
-NavBtn.Font = Enum.Font.GothamBold
-NavBtn.TextSize = 12
-NavBtn.TextXAlignment = Enum.TextXAlignment.Left
-NavBtn.ZIndex = 3
-NavBtn.Parent = Sidebar
-Instance.new("UICorner", NavBtn).CornerRadius = UDim.new(0, 6)
+local NavContainer = Instance.new("Frame")
+NavContainer.Size = UDim2.new(1, 0, 1, -60)
+NavContainer.BackgroundTransparency = 1
+NavContainer.Parent = Sidebar
+local NavLayout = Instance.new("UIListLayout", NavContainer)
+NavLayout.Padding = UDim.new(0, 4)
+NavLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
+-- 右侧内容区
 local ContentFrame = Instance.new("Frame")
 ContentFrame.Size = UDim2.new(1, -136, 1, -50)
 ContentFrame.Position = UDim2.fromOffset(128, 40)
@@ -254,33 +253,72 @@ ContentFrame.BackgroundTransparency = 1
 ContentFrame.ZIndex = 2
 ContentFrame.Parent = MainContent
 
-local CardList = Instance.new("ScrollingFrame")
-CardList.Size = UDim2.new(1, 0, 1, 0)
-CardList.BackgroundTransparency = 1
-CardList.BorderSizePixel = 0
-CardList.ScrollBarThickness = 3
-CardList.ScrollBarImageColor3 = Colors.ToggleOff
-CardList.CanvasSize = UDim2.new(0, 0, 0, 0)
-CardList.AutomaticCanvasSize = Enum.AutomaticSize.Y
-CardList.ZIndex = 2
-CardList.Parent = ContentFrame
+local Pages = {}
+local NavButtons = {}
 
-local CardLayout = Instance.new("UIListLayout", CardList)
-CardLayout.Padding = UDim.new(0, 8)
-CardLayout.SortOrder = Enum.SortOrder.LayoutOrder
-local CardPad = Instance.new("UIPadding", CardList)
-CardPad.PaddingRight = UDim.new(0, 8)
+local function CreatePage(name)
+    local sf = Instance.new("ScrollingFrame")
+    sf.Size = UDim2.new(1, 0, 1, 0)
+    sf.BackgroundTransparency = 1
+    sf.BorderSizePixel = 0
+    sf.ScrollBarThickness = 3
+    sf.ScrollBarImageColor3 = Colors.ToggleOff
+    sf.CanvasSize = UDim2.new(0, 0, 0, 0)
+    sf.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    sf.ZIndex = 2
+    sf.Parent = ContentFrame
+    sf.Visible = false
+    local layout = Instance.new("UIListLayout", sf)
+    layout.Padding = UDim.new(0, 8)
+    layout.SortOrder = Enum.SortOrder.LayoutOrder
+    local pad = Instance.new("UIPadding", sf)
+    pad.PaddingRight = UDim.new(0, 8)
+    Pages[name] = sf
+    return sf
+end
+
+local function SwitchPage(name)
+    for pName, pFrame in pairs(Pages) do
+        pFrame.Visible = (pName == name)
+    end
+    for bName, btn in pairs(NavButtons) do
+        if bName == name then
+            btn.BackgroundColor3 = Colors.Panel
+            btn.TextColor3 = Colors.AccentBlue
+        else
+            btn.BackgroundColor3 = Colors.Sidebar
+            btn.TextColor3 = Colors.TextLight
+        end
+    end
+end
+
+local function CreateNavBtn(name)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -12, 0, 32)
+    btn.Position = UDim2.fromOffset(6, 0)
+    btn.BackgroundColor3 = Colors.Sidebar
+    btn.Text = "  " .. name
+    btn.TextColor3 = Colors.TextLight
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 12
+    btn.TextXAlignment = Enum.TextXAlignment.Left
+    btn.ZIndex = 3
+    btn.Parent = NavContainer
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    btn.MouseButton1Click:Connect(function() SwitchPage(name) end)
+    NavButtons[name] = btn
+end
 
 -- ==========================================
 -- 组件生成器
 -- ==========================================
-local function AddCard(text, toggleKey)
+local function AddCard(parent, text, toggleKey)
     local card = Instance.new("Frame")
     card.Size = UDim2.new(1, 0, 0, 44)
     card.BackgroundColor3 = Colors.Panel
     card.BorderSizePixel = 0
     card.ZIndex = 3
-    card.Parent = CardList
+    card.Parent = parent
     Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
     
     local lbl = Instance.new("TextLabel")
@@ -338,14 +376,14 @@ local function AddCard(text, toggleKey)
     end)
 end
 
-local function AddMultiSelectDropdown(titleText, options, configTable)
+local function AddMultiSelectDropdown(parent, titleText, options, configTable)
     local dropdown = Instance.new("Frame")
     dropdown.Size = UDim2.new(1, 0, 0, 44)
     dropdown.BackgroundColor3 = Colors.Panel
     dropdown.BorderSizePixel = 0
     dropdown.ClipsDescendants = true
     dropdown.ZIndex = 3
-    dropdown.Parent = CardList
+    dropdown.Parent = parent
     Instance.new("UICorner", dropdown).CornerRadius = UDim.new(0, 8)
 
     local header = Instance.new("TextButton")
@@ -390,8 +428,9 @@ local function AddMultiSelectDropdown(titleText, options, configTable)
     local function expand()
         isExpanded = not isExpanded
         local targetSize = isExpanded and UDim2.new(1, 0, 0, 44 + #options * 34 + 10) or UDim2.new(1, 0, 0, 44)
-        TweenService:Create(dropdown, TweenInfo.new(0.35, Enum.EasingStyle.Quint), {Size = targetSize}):Play()
-        TweenService:Create(arrow, TweenInfo.new(0.35), {Rotation = isExpanded and 180 or 0}):Play()
+        local tweenInfo = TweenInfo.new(0.6, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+        TweenService:Create(dropdown, tweenInfo, {Size = targetSize}):Play()
+        TweenService:Create(arrow, tweenInfo, {Rotation = isExpanded and 180 or 0}):Play()
     end
 
     header.MouseButton1Click:Connect(expand)
@@ -448,16 +487,30 @@ local function AddMultiSelectDropdown(titleText, options, configTable)
     end
 end
 
-AddCard("玩家透视", "ESP")
-AddCard("人物高亮", "Highlight")
-AddMultiSelectDropdown("透视阵营选择", 
+-- ==========================================
+-- 构建页面与导航
+-- ==========================================
+CreateNavBtn("视觉")
+CreateNavBtn("主要")
+
+local page_Visual = CreatePage("视觉")
+AddCard(page_Visual, "玩家透视", "ESP")
+AddCard(page_Visual, "人物高亮", "Highlight")
+AddMultiSelectDropdown(page_Visual, "透视阵营选择", 
     {"平民", "警察", "医生", "消防员", "厨师", "快递员", "农夫", "囚犯", "其他"}, 
     Config.Filters
 )
 
+local page_Main = CreatePage("主要")
+AddCard(page_Main, "无限耐久", "InfiniteStamina")
+AddCard(page_Main, "无限饥饿", "InfiniteHunger")
+
+-- 默认打开视觉
+SwitchPage("视觉")
+
+-- 动画控制
 local openTweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 local closeTweenInfo = TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In)
-
 local function ToggleUI(openState)
     if isAnimating then return end
     isAnimating = true
@@ -466,13 +519,11 @@ local function ToggleUI(openState)
         MainContent.Visible = true
         CapsuleText.Visible = false
         CapsuleBtn.Visible = false
-        -- 展开时，下移到 Y=40，保持正常显示位置
         TweenService:Create(Main, openTweenInfo, {Size = UDim2.fromOffset(480, 320), Position = UDim2.new(0.5, 0, 0, 40)}):Play()
         TweenService:Create(MainCorner, openTweenInfo, {CornerRadius = UDim.new(0, 12)}):Play()
         task.wait(0.5)
     else
         MainContent.Visible = false
-        -- 收起时，回到顶部 Y=10 变回胶囊
         TweenService:Create(Main, closeTweenInfo, {Size = UDim2.fromOffset(110, 32), Position = UDim2.new(0.5, 0, 0, 10)}):Play()
         TweenService:Create(MainCorner, closeTweenInfo, {CornerRadius = UDim.new(1, 0)}):Play()
         task.wait(0.4)
@@ -485,8 +536,57 @@ end
 CapsuleBtn.MouseButton1Click:Connect(function() ToggleUI(true) end)
 CloseBtn.MouseButton1Click:Connect(function() ToggleUI(false) end)
 
+
 -- ==========================================
--- 4. 底层透视与高亮逻辑
+-- 4. 核心：属性阈值锁值
+-- ==========================================
+local function StartAttributeLock()
+    task.spawn(function()
+        while task.wait(0.5) do -- 低频写入
+            pcall(function()
+                local p = LP
+                local char = p.Character
+                
+                -- 检查饥饿
+                if Config.InfiniteHunger then
+                    local keys = {"Hunger", "Food", "Thirst", "Satiety", "饥饿"}
+                    for _, k in ipairs(keys) do
+                        local val = p:GetAttribute(k)
+                        if not val and char then val = char:GetAttribute(k) end
+                        
+                        if type(val) == "number" then
+                            -- 偏差超过 5 才强制设为 100
+                            if math.abs(val - 100) > 5 then
+                                if p:GetAttribute(k) then p:SetAttribute(k, 100)
+                                elseif char then char:SetAttribute(k, 100) end
+                            end
+                        end
+                    end
+                end
+                
+                -- 检查耐久
+                if Config.InfiniteStamina then
+                    local keys = {"Stamina", "Energy", "Endurance", "耐力", "体力"}
+                    for _, k in ipairs(keys) do
+                        local val = p:GetAttribute(k)
+                        if not val and char then val = char:GetAttribute(k) end
+                        
+                        if type(val) == "number" then
+                            if math.abs(val - 100) > 5 then
+                                if p:GetAttribute(k) then p:SetAttribute(k, 100)
+                                elseif char then char:SetAttribute(k, 100) end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end
+StartAttributeLock()
+
+-- ==========================================
+-- 5. 底层透视与高亮逻辑
 -- ==========================================
 local espCache = {}
 
@@ -563,7 +663,7 @@ task.spawn(function()
         for plr, data in pairs(espCache) do
             pcall(function()
                 if not plr.Character then
-                    data.box.Visible = false; data.nameTxt.Visible = false; d.distTxt.Visible = false
+                    data.box.Visible = false; data.nameTxt.Visible = false; data.distTxt.Visible = false
                     return
                 end
                 
@@ -616,4 +716,4 @@ task.spawn(function()
     end
 end)
 
-print("[DeepSeek] 胶囊置顶/面板居中版加载完毕")
+print("[DeepSeek] 主要功能与属性锁值加载完毕")
