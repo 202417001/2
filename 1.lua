@@ -1,11 +1,11 @@
 -- ============================================
--- DeepSeek Studio (深度诊断 + 属性/数值锁)
+-- DeepSeek Studio (多页导航 · 战斗杀戮版)
 -- ============================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UIS = game:GetService("UserInputService")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
@@ -21,8 +21,9 @@ mainGui.Parent = container
 local Config = { 
     ESP = false, 
     Highlight = false,
-    InfiniteStamina = false,
-    InfiniteHunger = false,
+    KillAura = false,
+    KillRange = 30, 
+    KillHitCount = 2,
     Filters = {
         ["平民"] = true, ["警察"] = true, ["医生"] = true,
         ["消防员"] = true, ["厨师"] = true, ["快递员"] = true,
@@ -195,6 +196,7 @@ CloseBtn.TextSize = 20
 CloseBtn.ZIndex = 10
 CloseBtn.Parent = TopBar
 
+-- 导航栏
 local Sidebar = Instance.new("Frame")
 Sidebar.Size = UDim2.fromOffset(120, 250)
 Sidebar.Position = UDim2.fromOffset(8, 40)
@@ -368,19 +370,88 @@ local function AddCard(parent, text, toggleKey)
     end)
 end
 
-local function AddActionButton(parent, text, callback)
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(1, 0, 0, 40)
-    btn.BackgroundColor3 = Colors.AccentBlue
-    btn.BorderSizePixel = 0
-    btn.Text = text
-    btn.TextColor3 = Colors.Panel
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 13
-    btn.ZIndex = 3
-    btn.Parent = parent
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
-    btn.MouseButton1Click:Connect(callback)
+local function AddSlider(parent, text, minVal, maxVal, defaultVal, callback)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, 60)
+    card.BackgroundColor3 = Colors.Panel
+    card.BorderSizePixel = 0
+    card.ZIndex = 3
+    card.Parent = parent
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+    
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -30, 0, 20)
+    lbl.Position = UDim2.fromOffset(16, 6)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = text .. ": " .. defaultVal
+    lbl.TextColor3 = Colors.TextDark
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 13
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.ZIndex = 4
+    lbl.Parent = card
+
+    local track = Instance.new("Frame")
+    track.Size = UDim2.new(1, -32, 0, 6)
+    track.Position = UDim2.new(0, 16, 1, -16)
+    track.BackgroundColor3 = Colors.ToggleOff
+    track.BorderSizePixel = 0
+    track.ZIndex = 4
+    track.Parent = card
+    Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((defaultVal-minVal)/(maxVal-minVal), 0, 1, 0)
+    fill.BackgroundColor3 = Colors.AccentBlue
+    fill.BorderSizePixel = 0
+    fill.ZIndex = 5
+    fill.Parent = track
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.fromOffset(16, 16)
+    knob.Position = UDim2.new((defaultVal-minVal)/(maxVal-minVal), -8, 0.5, 0)
+    knob.AnchorPoint = Vector2.new(0, 0.5)
+    knob.BackgroundColor3 = Colors.Panel
+    knob.ZIndex = 6
+    knob.Parent = track
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+    local kStroke = Instance.new("UIStroke", knob)
+    kStroke.Color = Colors.ToggleOff
+    kStroke.Thickness = 1
+
+    local touchArea = Instance.new("TextButton")
+    touchArea.Size = UDim2.new(1, 0, 1, 0)
+    touchArea.BackgroundTransparency = 1
+    touchArea.Text = ""
+    touchArea.ZIndex = 7
+    touchArea.Parent = card
+
+    local isDragging = false
+    local function updateVal(xPos)
+        local relX = math.clamp((xPos - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+        local val = math.floor(minVal + (maxVal - minVal) * relX)
+        fill.Size = UDim2.new(relX, 0, 1, 0)
+        knob.Position = UDim2.new(relX, -8, 0.5, 0)
+        lbl.Text = text .. ": " .. val
+        callback(val)
+    end
+
+    touchArea.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isDragging = true; updateVal(input.Position.X)
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if isDragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+            updateVal(input.Position.X)
+        end
+    end)
+    UIS.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isDragging = false
+        end
+    end)
 end
 
 local function AddMultiSelectDropdown(parent, titleText, options, configTable)
@@ -498,7 +569,7 @@ end
 -- 构建页面与导航
 -- ==========================================
 CreateNavBtn("视觉")
-CreateNavBtn("主要")
+CreateNavBtn("战斗")
 
 local page_Visual = CreatePage("视觉")
 AddCard(page_Visual, "玩家透视", "ESP")
@@ -508,99 +579,10 @@ AddMultiSelectDropdown(page_Visual, "透视阵营选择",
     Config.Filters
 )
 
-local page_Main = CreatePage("主要")
-AddCard(page_Main, "无限耐久", "InfiniteStamina")
-AddCard(page_Main, "无限饥饿", "InfiniteHunger")
-
--- 加入诊断按钮
-AddActionButton(page_Main, "运行深度诊断 (看控制台)", function()
-    -- 诊断代码块
-    local TAG = "[DIAG]"
-    local function log(...) print(TAG, ...) end
-
-    local function dumpAttributes(obj, label)
-        log("==== ATTRIBUTES:", label, "====")
-        local ok, attrs = pcall(function() return obj:GetAttributes() end)
-        if not ok or not attrs then log("  (无法读取)"); return end
-        local count = 0
-        for k, v in pairs(attrs) do
-            log("  ATTR", k, "=", tostring(v), typeof(v))
-            count = count + 1
-        end
-        if count == 0 then log("  (空)") end
-    end
-
-    local function dumpChildren(obj, label)
-        log("==== CHILDREN:", label, "====")
-        local ok, kids = pcall(function() return obj:GetChildren() end)
-        if not ok or not kids then log("  (无法读取)"); return end
-        local count = 0
-        for _, c in ipairs(kids) do
-            local extra = ""
-            if c:IsA("ValueBase") then extra = "  VALUE=" .. tostring(c.Value)
-            elseif c:IsA("LocalScript") or c:IsA("Script") then extra = "  DISABLED=" .. tostring(c.Disabled) end
-            log("  ", c.ClassName, c.Name, extra)
-            count = count + 1
-        end
-        if count == 0 then log("  (空)") end
-    end
-
-    local function dumpPlayerGui()
-        log("==== PLAYER GUI 脚本 ====")
-        local pg = LP:FindFirstChild("PlayerGui")
-        if not pg then log("  (无 PlayerGui)"); return end
-        local function walk(node, depth)
-            if depth > 4 then return end
-            for _, c in ipairs(node:GetChildren()) do
-                if c:IsA("LocalScript") then
-                    log(string.rep("  ", depth), "LOCALSCRIPT", c:GetFullName(), "Disabled=", c.Disabled)
-                end
-                walk(c, depth + 1)
-            end
-        end
-        pcall(walk, pg, 1)
-    end
-
-    local hooked = {}
-    local function hookRemotes(root, label)
-        log("==== REMOTES:", label, "====")
-        local function scan(node, depth)
-            if depth > 3 then return end
-            for _, c in ipairs(node:GetChildren()) do
-                if c:IsA("RemoteEvent") and not hooked[c] then
-                    hooked[c] = true
-                    log("  HOOK", c:GetFullName())
-                    pcall(function()
-                        c.OnClientEvent:Connect(function(...)
-                            local args = {...}
-                            local parts = {}
-                            for i = 1, math.min(#args, 6) do parts[i] = tostring(args[i]) end
-                            log("  REMOTE->", c.Name, "args:", table.concat(parts, ", "))
-                        end)
-                    end)
-                end
-                scan(c, depth + 1)
-            end
-        end
-        pcall(scan, root, 1)
-    end
-
-    log("================ SCAN START ================")
-    dumpAttributes(LP, "LocalPlayer")
-    dumpChildren(LP, "LocalPlayer")
-    if LP.Character then
-        dumpAttributes(LP.Character, "Character")
-        dumpChildren(LP.Character, "Character")
-        local hum = LP.Character:FindFirstChildOfClass("Humanoid")
-        if hum then dumpAttributes(hum, "Humanoid") end
-    else
-        log("(角色尚未加载)")
-    end
-    dumpPlayerGui()
-    hookRemotes(ReplicatedStorage, "ReplicatedStorage")
-    hookRemotes(workspace, "Workspace")
-    log("================ SCAN END ================")
-end)
+local page_Combat = CreatePage("战斗")
+AddCard(page_Combat, "杀戮功能", "KillAura")
+AddSlider(page_Combat, "杀戮范围 (米)", 10, 150, Config.KillRange, function(v) Config.KillRange = v end)
+AddSlider(page_Combat, "攻击次数 (倍率)", 1, 10, Config.KillHitCount, function(v) Config.KillHitCount = v end)
 
 SwitchPage("视觉")
 
@@ -633,54 +615,79 @@ CloseBtn.MouseButton1Click:Connect(function() ToggleUI(false) end)
 
 
 -- ==========================================
--- 4. 核心：属性与 ValueBase 阈值锁值
+-- 4. 核心：战斗(杀戮)逻辑
 -- ==========================================
-local function StartAttributeLock()
-    task.spawn(function()
-        while task.wait(0.5) do
-            pcall(function()
-                local p = LP
-                local char = p.Character
-                
-                -- 锁定目标的函数
-                local function checkAndLock(obj, keys, targetVal)
-                    if not obj then return end
-                    for _, k in ipairs(keys) do
-                        local val = obj:GetAttribute(k)
-                        if type(val) == "number" and math.abs(val - targetVal) > 5 then
-                            obj:SetAttribute(k, targetVal)
-                        end
-                    end
-                    for _, child in ipairs(obj:GetChildren()) do
-                        if child:IsA("NumberValue") or child:IsA("IntValue") then
-                            local lname = child.Name:lower()
-                            for _, k in ipairs(keys) do
-                                if lname == k:lower() then
-                                    if math.abs(child.Value - targetVal) > 5 then
-                                        child.Value = targetVal
+local lastAttackTime = 0
+
+local function executeCombat(tool)
+    if not Config.KillAura then return end
+    local currentTime = tick()
+    -- 全局冷却限制，防止无脑刷伤害
+    if currentTime - lastAttackTime < 1.0 then return end
+    lastAttackTime = currentTime
+
+    local myChar = LP.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
+
+    local hitTargets = {}
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LP and plr.Character then
+            local tgtHRP = plr.Character:FindFirstChild("HumanoidRootPart")
+            local tgtHum = plr.Character:FindFirstChildOfClass("Humanoid")
+            
+            if tgtHRP and tgtHum and tgtHum.Health > 0 then
+                local dist = (myHRP.Position - tgtHRP.Position).Magnitude
+                -- 判断范围 (米换算为 Studs)
+                if dist <= (Config.KillRange * 3) then
+                    if not hitTargets[plr.Character] then
+                        hitTargets[plr.Character] = true
+                        
+                        task.spawn(function()
+                            for i = 1, Config.KillHitCount do
+                                -- 随机漏人机制：25% 概率漏掉，模拟真人
+                                if math.random(1, 100) > 25 then
+                                    pcall(function() tool:Activate() end)
+                                    
+                                    local handle = tool:FindFirstChild("Handle")
+                                    if handle and firetouchinterest then
+                                        for _, part in ipairs(plr.Character:GetChildren()) do
+                                            if part:IsA("BasePart") then
+                                                pcall(function()
+                                                    firetouchinterest(handle, part, 0)
+                                                    -- 随机微延迟，防特征扫描
+                                                    task.wait(math.random(15, 40) / 1000)
+                                                    firetouchinterest(handle, part, 1)
+                                                end)
+                                            end
+                                        end
                                     end
                                 end
+                                -- 攻击间隔随机化
+                                task.wait(math.random(20, 60) / 1000)
                             end
-                        end
+                        end)
                     end
                 end
+            end
+        end
+    end
+end
 
-                if Config.InfiniteHunger then
-                    local keys = {"Hunger", "Food", "Thirst", "Satiety", "饥饿", "饱食"}
-                    checkAndLock(p, keys, 100)
-                    checkAndLock(char, keys, 100)
-                end
-                
-                if Config.InfiniteStamina then
-                    local keys = {"Stamina", "Energy", "Endurance", "耐力", "体力", "精力"}
-                    checkAndLock(p, keys, 100)
-                    checkAndLock(char, keys, 100)
-                end
-            end)
+-- 监听装备武器 (Equipped 事件)
+local function onCharacterAdded(char)
+    char.ChildAdded:Connect(function(child)
+        if child:IsA("Tool") then
+            task.wait(0.1)
+            executeCombat(child)
         end
     end)
+    local currentTool = char:FindFirstChildOfClass("Tool")
+    if currentTool then executeCombat(currentTool) end
 end
-StartAttributeLock()
+if LP.Character then onCharacterAdded(LP.Character) end
+LP.CharacterAdded:Connect(onCharacterAdded)
 
 -- ==========================================
 -- 5. 底层透视与高亮逻辑
@@ -813,4 +820,4 @@ task.spawn(function()
     end
 end)
 
-print("[DeepSeek] 主要功能、诊断与底层锁值加载完毕")
+print("[DeepSeek] 战斗页与随机化杀戮加载完毕")
