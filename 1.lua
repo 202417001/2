@@ -1,5 +1,5 @@
 -- ============================================
--- DeepSeek Studio (多页导航 · 战斗杀戮版)
+-- DeepSeek Studio (四角汇聚启动特效 · 战斗版)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -129,11 +129,12 @@ end
 local Main = Instance.new("Frame")
 Main.AnchorPoint = Vector2.new(0.5, 0)
 Main.Position = UDim2.new(0.5, 0, 0, 10)
-Main.Size = UDim2.fromOffset(110, 32)
+Main.Size = UDim2.fromOffset(0, 0) -- 初始为 0 用于启动动画
 Main.BackgroundColor3 = Colors.Bg
 Main.BorderSizePixel = 0
 Main.ClipsDescendants = true
 Main.Parent = mainGui
+Main.Visible = false
 local MainCorner = Instance.new("UICorner", Main)
 MainCorner.CornerRadius = UDim.new(1, 0)
 local MainStroke = Instance.new("UIStroke", Main)
@@ -196,7 +197,7 @@ CloseBtn.TextSize = 20
 CloseBtn.ZIndex = 10
 CloseBtn.Parent = TopBar
 
--- 导航栏
+-- 导航
 local Sidebar = Instance.new("Frame")
 Sidebar.Size = UDim2.fromOffset(120, 250)
 Sidebar.Position = UDim2.fromOffset(8, 40)
@@ -303,9 +304,7 @@ local function CreateNavBtn(name)
     NavButtons[name] = btn
 end
 
--- ==========================================
--- 组件生成器
--- ==========================================
+-- 组件
 local function AddCard(parent, text, toggleKey)
     local card = Instance.new("Frame")
     card.Size = UDim2.new(1, 0, 0, 44)
@@ -566,7 +565,7 @@ local function AddMultiSelectDropdown(parent, titleText, options, configTable)
 end
 
 -- ==========================================
--- 构建页面与导航
+-- 构建页面
 -- ==========================================
 CreateNavBtn("视觉")
 CreateNavBtn("战斗")
@@ -613,6 +612,60 @@ end
 CapsuleBtn.MouseButton1Click:Connect(function() ToggleUI(true) end)
 CloseBtn.MouseButton1Click:Connect(function() ToggleUI(false) end)
 
+-- ==========================================
+-- 启动动画 (四角汇聚)
+-- ==========================================
+local function PlayIntroAnimation()
+    local points = {
+        UDim2.new(0, 0, 0, 0),    -- 左上
+        UDim2.new(1, 0, 0, 0),    -- 右上
+        UDim2.new(0, 0, 1, 0),    -- 左下
+        UDim2.new(1, 0, 1, 0)     -- 右下
+    }
+    
+    local dots = {}
+    
+    for i = 1, 4 do
+        local dot = Instance.new("Frame")
+        dot.Size = UDim2.fromOffset(6, 6)
+        dot.Position = points[i]
+        dot.BackgroundColor3 = Color3.new(1, 1, 1)
+        dot.BorderSizePixel = 0
+        dot.Parent = mainGui
+        Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+        table.insert(dots, dot)
+        
+        -- 发光描边
+        local stroke = Instance.new("UIStroke", dot)
+        stroke.Color = Color3.new(1, 1, 1)
+        stroke.Thickness = 2
+        stroke.Transparency = 0.5
+        
+        -- 汇聚的 Tween
+        local tweenInfo = TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+        TweenService:Create(dot, tweenInfo, {
+            Position = UDim2.new(0.5, 0, 0, 26), -- 汇聚到屏幕顶部中央
+            Size = UDim2.fromOffset(12, 12),
+            BackgroundTransparency = 0.5
+        }):Play()
+    end
+    
+    task.delay(0.65, function()
+        -- 销毁汇聚的点
+        for _, dot in ipairs(dots) do
+            if dot then dot:Destroy() end
+        end
+        
+        -- 胶囊弹出
+        Main.Visible = true
+        Main.Size = UDim2.fromOffset(0, 0)
+        local popInfo = TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        TweenService:Create(Main, popInfo, {Size = UDim2.fromOffset(110, 32)}):Play()
+    end)
+end
+
+-- 启动动画
+PlayIntroAnimation()
 
 -- ==========================================
 -- 4. 核心：战斗(杀戮)逻辑
@@ -622,7 +675,6 @@ local lastAttackTime = 0
 local function executeCombat(tool)
     if not Config.KillAura then return end
     local currentTime = tick()
-    -- 全局冷却限制，防止无脑刷伤害
     if currentTime - lastAttackTime < 1.0 then return end
     lastAttackTime = currentTime
 
@@ -639,24 +691,19 @@ local function executeCombat(tool)
             
             if tgtHRP and tgtHum and tgtHum.Health > 0 then
                 local dist = (myHRP.Position - tgtHRP.Position).Magnitude
-                -- 判断范围 (米换算为 Studs)
                 if dist <= (Config.KillRange * 3) then
                     if not hitTargets[plr.Character] then
                         hitTargets[plr.Character] = true
-                        
                         task.spawn(function()
                             for i = 1, Config.KillHitCount do
-                                -- 随机漏人机制：25% 概率漏掉，模拟真人
                                 if math.random(1, 100) > 25 then
                                     pcall(function() tool:Activate() end)
-                                    
                                     local handle = tool:FindFirstChild("Handle")
                                     if handle and firetouchinterest then
                                         for _, part in ipairs(plr.Character:GetChildren()) do
                                             if part:IsA("BasePart") then
                                                 pcall(function()
                                                     firetouchinterest(handle, part, 0)
-                                                    -- 随机微延迟，防特征扫描
                                                     task.wait(math.random(15, 40) / 1000)
                                                     firetouchinterest(handle, part, 1)
                                                 end)
@@ -664,7 +711,6 @@ local function executeCombat(tool)
                                         end
                                     end
                                 end
-                                -- 攻击间隔随机化
                                 task.wait(math.random(20, 60) / 1000)
                             end
                         end)
@@ -675,7 +721,6 @@ local function executeCombat(tool)
     end
 end
 
--- 监听装备武器 (Equipped 事件)
 local function onCharacterAdded(char)
     char.ChildAdded:Connect(function(child)
         if child:IsA("Tool") then
@@ -820,4 +865,4 @@ task.spawn(function()
     end
 end)
 
-print("[DeepSeek] 战斗页与随机化杀戮加载完毕")
+print("[DeepSeek] 汇聚特效+战斗杀戮已加载")
