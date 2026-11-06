@@ -1,5 +1,5 @@
 -- ============================================
--- DeepSeek Studio (最终防闪退 · UI必出稳定版)
+-- DeepSeek Studio (主线程启动 · 纯净透视)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -9,7 +9,7 @@ local UIS = game:GetService("UserInputService")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- 1. 安全容器探测
+-- 1. 安全容器
 local container = game:GetService("CoreGui")
 pcall(function() if gethui then container = gethui() end end)
 
@@ -22,14 +22,7 @@ mainGui.Parent = container
 
 local Config = { 
     ESP = false, 
-    Highlight = false,
-    SilentAim = false,
-    FOV = 150,
-    Filters = {
-        ["平民"] = true, ["警察"] = true, ["医生"] = true,
-        ["消防员"] = true, ["厨师"] = true, ["快递员"] = true,
-        ["农夫"] = true, ["囚犯"] = true, ["其他"] = true
-    }
+    Highlight = false
 }
 
 local Colors = {
@@ -43,15 +36,16 @@ local Colors = {
 }
 
 -- ==========================================
--- UI 构建 (优先执行，保证弹出)
+-- 2. UI 构建 (主线程执行)
 -- ==========================================
 local Main = Instance.new("Frame")
 Main.AnchorPoint = Vector2.new(0.5, 0)
 Main.Position = UDim2.new(0.5, 0, 0, 10)
-Main.Size = UDim2.fromOffset(110, 32) -- 初始胶囊
+Main.Size = UDim2.fromOffset(0, 0) 
 Main.BackgroundColor3 = Colors.Bg
 Main.BorderSizePixel = 0
 Main.ClipsDescendants = true
+Main.Visible = false
 Main.Parent = mainGui
 local MainCorner = Instance.new("UICorner", Main)
 MainCorner.CornerRadius = UDim.new(1, 0)
@@ -221,89 +215,10 @@ local function AddCard(parent, text, toggleKey)
     end)
 end
 
-local function AddSlider(parent, text, minVal, maxVal, defaultVal, callback)
-    local card = Instance.new("Frame")
-    card.Size = UDim2.new(1, 0, 0, 60)
-    card.BackgroundColor3 = Colors.Panel
-    card.BorderSizePixel = 0
-    card.Parent = parent
-    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
-    
-    local lbl = Instance.new("TextLabel")
-    lbl.Size = UDim2.new(1, -30, 0, 20)
-    lbl.Position = UDim2.fromOffset(16, 6)
-    lbl.BackgroundTransparency = 1
-    lbl.Text = text .. ": " .. defaultVal
-    lbl.TextColor3 = Colors.TextDark
-    lbl.Font = Enum.Font.Gotham
-    lbl.TextSize = 13
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
-    lbl.Parent = card
-
-    local track = Instance.new("Frame")
-    track.Size = UDim2.new(1, -32, 0, 6)
-    track.Position = UDim2.new(0, 16, 1, -16)
-    track.BackgroundColor3 = Colors.ToggleOff
-    track.BorderSizePixel = 0
-    track.Parent = card
-    Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
-
-    local fill = Instance.new("Frame")
-    fill.Size = UDim2.new((defaultVal-minVal)/(maxVal-minVal), 0, 1, 0)
-    fill.BackgroundColor3 = Colors.AccentBlue
-    fill.BorderSizePixel = 0
-    fill.Parent = track
-    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
-
-    local knob = Instance.new("Frame")
-    knob.Size = UDim2.fromOffset(16, 16)
-    knob.Position = UDim2.new((defaultVal-minVal)/(maxVal-minVal), -8, 0.5, 0)
-    knob.AnchorPoint = Vector2.new(0, 0.5)
-    knob.BackgroundColor3 = Colors.Panel
-    knob.Parent = track
-    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
-
-    local touchArea = Instance.new("TextButton")
-    touchArea.Size = UDim2.new(1, 0, 1, 0)
-    touchArea.BackgroundTransparency = 1
-    touchArea.Text = ""
-    touchArea.Parent = card
-
-    local isDragging = false
-    local function updateVal(xPos)
-        local relX = math.clamp((xPos - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
-        local val = math.floor(minVal + (maxVal - minVal) * relX)
-        fill.Size = UDim2.new(relX, 0, 1, 0)
-        knob.Position = UDim2.new(relX, -8, 0.5, 0)
-        lbl.Text = text .. ": " .. val
-        callback(val)
-    end
-
-    touchArea.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            isDragging = true; updateVal(input.Position.X)
-        end
-    end)
-    UIS.InputChanged:Connect(function(input)
-        if isDragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
-            updateVal(input.Position.X)
-        end
-    end)
-    UIS.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
-            isDragging = false
-        end
-    end)
-end
-
 CreateNavBtn("视觉")
-CreateNavBtn("战斗")
 local page_Visual = CreatePage("视觉")
 AddCard(page_Visual, "玩家透视", "ESP")
 AddCard(page_Visual, "人物高亮", "Highlight")
-local page_Combat = CreatePage("战斗")
-AddCard(page_Combat, "静默自瞄", "SilentAim")
-AddSlider(page_Combat, "瞄准范围 (FOV)", 50, 600, Config.FOV, function(v) Config.FOV = v end)
 SwitchPage("视觉")
 
 local isOpen = false
@@ -333,87 +248,125 @@ CapsuleBtn.MouseButton1Click:Connect(function() ToggleUI(true) end)
 CloseBtn.MouseButton1Click:Connect(function() ToggleUI(false) end)
 
 -- ==========================================
--- 核心：防闪退极稳静默自瞄
+-- 3. 启动动画：三面星尘汇聚 (主线程直接调用)
 -- ==========================================
-local cachedTarget = nil
-local seatCooldown = false
-local lastSitState = false
-
--- 监听上下车
-task.spawn(function()
-    while task.wait(0.1) do
-        local char = LP.Character
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        local isSitting = hum and hum.Sit
-        if isSitting ~= lastSitState then
-            lastSitState = isSitting
-            seatCooldown = true
-            cachedTarget = nil 
-            task.wait(1.0) 
-            seatCooldown = false
-        end
-    end
-end)
-
--- 找目标
-task.spawn(function()
-    while task.wait(0.05) do
-        if Config.SilentAim and not seatCooldown then
-            local closest, minDist = nil, math.huge
-            local center = Camera.ViewportSize / 2
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr ~= LP and plr.Character then
-                    local part = plr.Character:FindFirstChild("Head") or plr.Character:FindFirstChild("HumanoidRootPart")
-                    local thum = plr.Character:FindFirstChildOfClass("Humanoid")
-                    if part and thum and thum.Health > 0 then
-                        if not plr.Team or plr.Team ~= LP.Team then
-                            local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
-                            if onScreen then
-                                local distToCenter = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
-                                if distToCenter <= Config.FOV then
-                                    local dist3D = (Camera.CFrame.Position - part.Position).Magnitude
-                                    if dist3D < minDist then minDist = dist3D; closest = part end
-                                end
-                            end
-                        end
-                    end
-                end
+local function PlayIntroAnimation()
+    local particles = {}
+    local PARTICLE_COUNT = 70
+    
+    local targetX = 0.5
+    local targetY = 0.05 
+    
+    for i = 1, PARTICLE_COUNT do
+        local dot = Instance.new("Frame")
+        dot.BackgroundColor3 = Color3.new(1, 1, 1)
+        dot.BorderSizePixel = 0
+        dot.ZIndex = 100
+        dot.Parent = mainGui
+        
+        local size = math.random(2, 5)
+        dot.Size = UDim2.fromOffset(size, size)
+        Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+        
+        local startX, startY
+        local edge = math.random(1, 3)
+        if edge == 1 then startX = 0; startY = math.random(0, 100) / 100
+        elseif edge == 2 then startX = 1; startY = math.random(0, 100) / 100
+        else startX = math.random(0, 100) / 100; startY = 1 end
+        
+        dot.Position = UDim2.new(startX, 0, startY, 0)
+        
+        local endX = targetX + (math.random(-20, 20) / 1000)
+        local endY = targetY + (math.random(-20, 20) / 1000)
+        
+        local delayTime = math.random(0, 30) / 100
+        local travelTime = math.random(30, 60) / 100
+        
+        table.insert(particles, dot)
+        
+        task.delay(delayTime, function()
+            if dot and dot.Parent then
+                local tweenInfo = TweenInfo.new(travelTime, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+                TweenService:Create(dot, tweenInfo, {
+                    Position = UDim2.new(endX, 0, endY, 0),
+                    BackgroundTransparency = 1
+                }):Play()
             end
-            cachedTarget = closest
-        else
-            cachedTarget = nil
-        end
-    end
-end)
-
-pcall(function()
-    if hookmetamethod then
-        local oldNamecall
-        oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
-            local method = getnamecallmethod()
-            
-            -- 极度精简的拦截
-            if not checkcaller() and Config.SilentAim and cachedTarget and not seatCooldown then
-                local hum = LP.Character and LP.Character:FindFirstChildOfClass("Humanoid")
-                if hum and not hum.Sit then
-                    if method == "Raycast" then
-                        local args = {...}
-                        if typeof(args[1]) == "Vector3" and typeof(args[2]) == "Vector3" then
-                            local myHRP = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-                            if myHRP and (args[1] - myHRP.Position).Magnitude < 15 then
-                                args[2] = (cachedTarget.Position - args[1]).Unit * 9999
-                                return oldNamecall(self, unpack(args))
-                            end
-                        end
-                    end
-                end
-            end
-            return oldNamecall(self, ...)
         end)
     end
-end)
+    
+    task.delay(1.0, function()
+        for _, dot in ipairs(particles) do
+            if dot then dot:Destroy() end
+        end
+        
+        Main.Visible = true
+        Main.Size = UDim2.fromOffset(0, 0)
+        local popInfo = TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+        TweenService:Create(Main, popInfo, {Size = UDim2.fromOffset(110, 32)}):Play()
+    end)
+end
 
--- 透视渲染
+-- 直接在主线程运行
+PlayIntroAnimation()
+
+-- ==========================================
+-- 4. 角色逻辑与底层透视
+-- ==========================================
+local RoleDict = {
+    ["Civilian"] = "平民", ["Police"] = "警察", ["Medical"] = "医生",
+    ["Chef"] = "厨师", ["Delivery"] = "快递员", ["Farmer"] = "农夫",
+    ["Fire"] = "消防员", ["Prisoner"] = "囚犯", ["Road Service"] = "其他",
+    ["Transit"] = "其他", ["Neutral"] = "其他", ["???"] = "其他"
+}
+
+local function getRoleName(plr)
+    local rawRole = nil
+    local roleAttr = plr:GetAttribute("Role") or plr:GetAttribute("RoleId")
+    if roleAttr then rawRole = tostring(roleAttr) end
+    if not rawRole and plr.Team and plr.Team.Name ~= "" then rawRole = plr.Team.Name end
+    if rawRole then
+        if RoleDict[rawRole] then return RoleDict[rawRole] end
+        local lr = rawRole:lower()
+        if lr:find("police") then return "警察"
+        elseif lr:find("civilian") then return "平民"
+        elseif lr:find("medical") or lr:find("doctor") then return "医生"
+        elseif lr:find("fire") then return "消防员"
+        end
+        return "其他"
+    end
+    return "平民"
+end
+
+local function getRoleColor(roleName)
+    if roleName == "警察" then return Color3.fromRGB(0, 85, 255)
+    elseif roleName == "医生" then return Color3.fromRGB(255, 30, 30)
+    elseif roleName == "消防员" then return Color3.fromRGB(255, 140, 0)
+    elseif roleName == "平民" then return Color3.fromRGB(255, 255, 255)
+    elseif roleName == "农夫" then return Color3.fromRGB(60, 255, 60)
+    elseif roleName == "囚犯" then return Color3.fromRGB(255, 100, 0)
+    end
+    return Color3.fromRGB(200, 200, 200)
+end
+
+local HIGHLIGHT_POOL_SIZE = 20
+local highlightPool = {}
+local hlFolder = Instance.new("Folder")
+hlFolder.Name = tostring(math.random(10000, 99999))
+pcall(function() hlFolder.Parent = container end)
+if not hlFolder.Parent then hlFolder.Parent = workspace end
+
+for i = 1, HIGHLIGHT_POOL_SIZE do
+    local hl = Instance.new("Highlight")
+    hl.Name = tostring(math.random(10000, 99999))
+    hl.DepthMode = Enum.HighlightDepthMode.Occluded
+    hl.OutlineTransparency = 1
+    hl.FillTransparency = 0.5
+    hl.Adornee = nil
+    hl.Parent = hlFolder
+    table.insert(highlightPool, hl)
+end
+
 local espCache = {}
 local function initPlayer(plr)
     if plr == LP or espCache[plr] then return end
@@ -432,35 +385,62 @@ end)
 
 task.spawn(function()
     while task.wait(0.02) do 
-        if not Config.ESP then
-            for _, d in pairs(espCache) do d.box.Visible = false; d.nameTxt.Visible = false; d.distTxt.Visible = false end
-            continue
-        end
-        for plr, data in pairs(espCache) do
-            pcall(function()
+        if Config.Highlight then
+            local validTargets = {}
+            for plr, _ in pairs(espCache) do
                 if plr.Character then
                     local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
-                    local head = plr.Character:FindFirstChild("Head")
                     local hum = plr.Character:FindFirstChildOfClass("Humanoid")
-                    if hrp and head and hum and hum.Health > 0 then
-                        local headPos, onScreen = Camera:WorldToViewportPoint(head.Position)
-                        if onScreen then
-                            local distance = math.floor((Camera.CFrame.Position - hrp.Position).Magnitude / 3)
-                            data.box.Visible = true; data.box.Size = UDim2.fromOffset(40, 60); data.box.Position = UDim2.fromOffset(headPos.X - 20, headPos.Y + 10)
-                            data.nameTxt.Visible = true; data.nameTxt.Text = plr.Name; data.nameTxt.Position = UDim2.fromOffset(headPos.X, headPos.Y - 10)
-                            data.distTxt.Visible = true; data.distTxt.Text = tostring(distance) .. "m"; data.distTxt.Position = UDim2.fromOffset(headPos.X, headPos.Y + 75)
+                    if hrp and hum and hum.Health > 0 then
+                        local dist = (Camera.CFrame.Position - hrp.Position).Magnitude
+                        table.insert(validTargets, {plr = plr, dist = dist})
+                    end
+                end
+            end
+            table.sort(validTargets, function(a, b) return a.dist < b.dist end)
+            for i = 1, HIGHLIGHT_POOL_SIZE do
+                local hl = highlightPool[i]
+                local target = validTargets[i]
+                if target and i <= 15 then 
+                    hl.Adornee = target.plr.Character
+                    hl.FillColor = getRoleColor(getRoleName(target.plr))
+                else
+                    hl.Adornee = nil
+                end
+            end
+        else
+            for i = 1, HIGHLIGHT_POOL_SIZE do highlightPool[i].Adornee = nil end
+        end
+        
+        if not Config.ESP then
+            for _, d in pairs(espCache) do d.box.Visible = false; d.nameTxt.Visible = false; d.distTxt.Visible = false end
+        else
+            for plr, data in pairs(espCache) do
+                pcall(function()
+                    if plr.Character then
+                        local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
+                        local head = plr.Character:FindFirstChild("Head")
+                        local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+                        if hrp and head and hum and hum.Health > 0 then
+                            local headPos, onScreen = Camera:WorldToViewportPoint(head.Position)
+                            if onScreen then
+                                local distance = math.floor((Camera.CFrame.Position - hrp.Position).Magnitude / 3)
+                                data.box.Visible = true; data.box.Size = UDim2.fromOffset(40, 60); data.box.Position = UDim2.fromOffset(headPos.X - 20, headPos.Y + 10)
+                                data.nameTxt.Visible = true; data.nameTxt.Text = "[" .. getRoleName(plr) .. "] " .. plr.Name; data.nameTxt.TextColor3 = getRoleColor(getRoleName(plr)); data.nameTxt.Position = UDim2.fromOffset(headPos.X, headPos.Y - 10)
+                                data.distTxt.Visible = true; data.distTxt.Text = tostring(distance) .. "m"; data.distTxt.Position = UDim2.fromOffset(headPos.X, headPos.Y + 75)
+                            else
+                                data.box.Visible = false; data.nameTxt.Visible = false; data.distTxt.Visible = false
+                            end
                         else
                             data.box.Visible = false; data.nameTxt.Visible = false; data.distTxt.Visible = false
                         end
                     else
                         data.box.Visible = false; data.nameTxt.Visible = false; data.distTxt.Visible = false
                     end
-                else
-                    data.box.Visible = false; data.nameTxt.Visible = false; data.distTxt.Visible = false
-                end
-            end)
+                end)
+            end
         end
     end
 end)
 
-print("[DeepSeek] 最终极简防闪退版加载完毕")
+print("[DeepSeek] 主线程纯净版加载完毕")
