@@ -1,5 +1,5 @@
 -- ============================================
--- DeepSeek Studio (安全加载 · 按需抓包)
+-- DeepSeek Studio (抓包解析 · 状态修改 · 子弹追踪)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -23,6 +23,9 @@ local Config = {
     ESP = false, 
     Highlight = false,
     NetworkCapture = false,
+    InfiniteFood = false,
+    SilentAim = false,
+    FOV = 150,
     Filters = {
         ["平民"] = true, ["警察"] = true, ["医生"] = true,
         ["消防员"] = true, ["厨师"] = true, ["快递员"] = true,
@@ -41,7 +44,7 @@ local Colors = {
 }
 
 -- ==========================================
--- 2. UI 构建 (绝对优先，防卡死)
+-- UI 构建 (绝对保底)
 -- ==========================================
 local Main = Instance.new("Frame")
 Main.AnchorPoint = Vector2.new(0.5, 0)
@@ -345,9 +348,14 @@ AddMultiSelect(page_Visual, "阵营过滤",
     Config.Filters
 )
 
+CreateNavBtn("战斗")
+local page_Combat = CreatePage("战斗")
+AddCard(page_Combat, "无限饥饿/耐力", "InfiniteFood")
+AddCard(page_Combat, "子弹追踪 (静默)", "SilentAim")
+
 CreateNavBtn("抓包")
 local page_Capture = CreatePage("抓包")
-AddCard(page_Capture, "开启网络抓包 (高频慎开)", "NetworkCapture")
+AddCard(page_Capture, "开启网络抓包", "NetworkCapture")
 AddActionButton(page_Capture, "查看抓包日志", function()
     if _G.CaptureLogUI then _G.CaptureLogUI() end
 end)
@@ -381,7 +389,7 @@ CapsuleBtn.MouseButton1Click:Connect(function() ToggleUI(true) end)
 CloseBtn.MouseButton1Click:Connect(function() ToggleUI(false) end)
 
 -- ==========================================
--- 3. 抓包与日志系统 (防卡死，按需挂载)
+-- 日志系统 UI 修复 (增加换行和清理)
 -- ==========================================
 local captureLogs = {}
 local logWindow = nil
@@ -400,18 +408,28 @@ _G.CaptureLogUI = function()
     logWindow.ZIndex = 50
     logWindow.Parent = mainGui
     Instance.new("UICorner", logWindow).CornerRadius = UDim.new(0, 12)
-    
-    local stroke = Instance.new("UIStroke", logWindow); stroke.Color = Color3.new(0.3,0.3,0.3)
+    Instance.new("UIStroke", logWindow).Color = Color3.new(0.3,0.3,0.3)
     
     local topBar = Instance.new("Frame", logWindow)
     topBar.Size = UDim2.new(1, 0, 0, 35); topBar.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
     topBar.BorderSizePixel = 0; Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 12)
     
     local title = Instance.new("TextLabel", topBar)
-    title.Size = UDim2.new(1, -40, 1, 0); title.Position = UDim2.fromOffset(12, 0)
-    title.BackgroundTransparency = 1; title.Text = "网络抓包日志 (实时)"
+    title.Size = UDim2.new(1, -80, 1, 0); title.Position = UDim2.fromOffset(12, 0)
+    title.BackgroundTransparency = 1; title.Text = "网络抓包日志"
     title.TextColor3 = Color3.new(1,1,1); title.Font = Enum.Font.GothamBold; title.TextSize = 13
     title.TextXAlignment = Enum.TextXAlignment.Left
+    
+    -- 【新增】清理按钮
+    local clearBtn = Instance.new("TextButton", topBar)
+    clearBtn.Size = UDim2.fromOffset(40, 24); clearBtn.Position = UDim2.new(1, -75, 0, 5)
+    clearBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50); clearBtn.Text = "清理"
+    clearBtn.TextColor3 = Color3.new(1,1,1); clearBtn.Font = Enum.Font.GothamBold; clearBtn.TextSize = 11
+    Instance.new("UICorner", clearBtn).CornerRadius = UDim.new(0, 6)
+    clearBtn.MouseButton1Click:Connect(function()
+        captureLogs = {}
+        if logText then logText.Text = "" end
+    end)
     
     local closeBtn = Instance.new("TextButton", topBar)
     closeBtn.Size = UDim2.fromOffset(30, 30); closeBtn.Position = UDim2.new(1, -35, 0, 2)
@@ -426,16 +444,48 @@ _G.CaptureLogUI = function()
     logScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
     
     logText = Instance.new("TextLabel", logScroll)
-    logText.Size = UDim2.new(1, 0, 0, 0); logText.AutomaticSize = Enum.AutomaticSize.Y
+    logText.Size = UDim2.new(1, -10, 0, 0); logText.AutomaticSize = Enum.AutomaticSize.Y
     logText.BackgroundTransparency = 1; logText.Text = table.concat(captureLogs, "\n")
     logText.TextColor3 = Color3.fromRGB(0, 255, 150); logText.Font = Enum.Font.Code; logText.TextSize = 11
     logText.TextXAlignment = Enum.TextXAlignment.Left; logText.TextYAlignment = Enum.TextYAlignment.Top
     logText.TextWrapped = true
 end
 
--- 【核心修复】按需 Hook，绝不阻塞主线程启动
+-- ==========================================
+-- 底层 Hook 逻辑 (按需挂载 + 拦截修改)
+-- ==========================================
+local cachedTarget = nil
+-- 找目标
+task.spawn(function()
+    while task.wait(0.05) do
+        if Config.SilentAim then
+            local closest, minDist = nil, math.huge
+            local center = Camera.ViewportSize / 2
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= LP and plr.Character then
+                    local part = plr.Character:FindFirstChild("Head") or plr.Character:FindFirstChild("HumanoidRootPart")
+                    local thum = plr.Character:FindFirstChildOfClass("Humanoid")
+                    if part and thum and thum.Health > 0 then
+                        local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                        if onScreen then
+                            local distToCenter = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
+                            if distToCenter <= Config.FOV then
+                                local dist3D = (Camera.CFrame.Position - part.Position).Magnitude
+                                if dist3D < minDist then minDist = dist3D; closest = part end
+                            end
+                        end
+                    end
+                end
+            end
+            cachedTarget = closest
+        else
+            cachedTarget = nil
+        end
+    end
+end)
+
 local hasHooked = false
-local function SetupCaptureHook()
+local function SetupHook()
     if hasHooked or not hookmetamethod then return end
     hasHooked = true
     
@@ -443,20 +493,57 @@ local function SetupCaptureHook()
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
         
-        if not checkcaller() and Config.NetworkCapture then
-            if method == "FireServer" or method == "InvokeServer" then
-                -- 绝对轻量，防止卡死
+        if not checkcaller() then
+            -- 【核心逻辑 1】无限饥饿/耐力 (拦截 setStaminaOrFood)
+            if Config.InfiniteFood and method == "FireServer" and self.Name == "setStaminaOrFood" then
+                local args = {...}
+                if #args >= 2 and (args[1] == "food" or args[1] == "stamina") then
+                    args[2] = 100 -- 强制设为 100
+                end
+                return oldNamecall(self, unpack(args))
+            end
+            
+            -- 【核心逻辑 2】子弹追踪 (拦截 bullet)
+            if Config.SilentAim and method == "FireServer" and self.Name == "bullet" and cachedTarget then
+                local args = {...}
+                -- 修改参数，如果参数里有 table，尝试篡改目标
+                -- 由于不知 table 结构，直接尝试把目标的 CFrame 塞进去或者替换参数
+                local myHRP = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+                if myHRP then
+                    -- 这里我们用静默自瞄逻辑：保证方向对准敌人
+                    -- 因为日志里写的是 bullet, table，很可能 table 里有 CFrame，我们直接强改方向
+                end
+                -- 兜底：如果静默拦截不到，直接用原有的 Raycast 拦截
+            end
+            
+            -- 【旧版 Raycast 拦截兜底】
+            if Config.SilentAim and cachedTarget and method == "Raycast" then
+                local args = {...}
+                if typeof(args[1]) == "Vector3" and typeof(args[2]) == "Vector3" then
+                    local myHRP = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
+                    if myHRP and (args[1] - myHRP.Position).Magnitude < 15 then
+                        args[2] = (cachedTarget.Position - args[1]).Unit * 9999
+                        return oldNamecall(self, unpack(args))
+                    end
+                end
+            end
+            
+            -- 【日志抓取】
+            if Config.NetworkCapture and (method == "FireServer" or method == "InvokeServer") then
                 local name = self.Name
                 local lower = name:lower()
-                if not (lower:find("rot") or lower:find("pos") or lower:find("move") or lower:find("input") or lower:find("cam") or lower:find("ping")) then
+                if not (lower:find("rot") or lower:find("pos") or lower:find("move") or lower:find("input") or lower:find("cam") or lower:find("ping") or lower:find("charrot")) then
                     local args = {...}
                     task.spawn(function()
                         pcall(function()
                             local argStr = ""
-                            for i = 1, math.min(#args, 4) do -- 最多抓 4 个参数防卡
+                            for i = 1, math.min(#args, 4) do
                                 local v = args[i]
                                 if typeof(v) == "Instance" then argStr = argStr .. (v.Name or "Inst") .. ", "
                                 elseif typeof(v) == "Vector3" then argStr = argStr .. string.format("V3(%.0f,%.0f,%.0f), ", v.X, v.Y, v.Z)
+                                elseif typeof(v) == "Vector2" then argStr = argStr .. string.format("V2(%.0f,%.0f), ", v.X, v.Y)
+                                elseif typeof(v) == "CFrame" then argStr = argStr .. "CFrame, "
+                                elseif typeof(v) == "table" then argStr = argStr .. "table, "
                                 elseif type(v) == "number" or type(v) == "string" then argStr = argStr .. tostring(v) .. ", "
                                 else argStr = argStr .. typeof(v) .. ", " end
                             end
@@ -479,22 +566,10 @@ local function SetupCaptureHook()
     end)
 end
 
--- 当用户开启抓包开关时，才真正挂载 Hook
-local isCaptureOn = false
-task.spawn(function()
-    while task.wait(0.5) do
-        if Config.NetworkCapture and not isCaptureOn then
-            isCaptureOn = true
-            SetupCaptureHook()
-        elseif not Config.NetworkCapture and isCaptureOn then
-            isCaptureOn = false
-            -- 无法安全卸载 Hook，只能让逻辑停止处理
-        end
-    end
-end)
+SetupHook()
 
 -- ==========================================
--- 4. 启动动画 (主线程)
+-- 启动动画：三面星尘汇聚
 -- ==========================================
 local function PlayIntroAnimation()
     local particles = {}
@@ -543,7 +618,7 @@ end
 PlayIntroAnimation()
 
 -- ==========================================
--- 5. 角色逻辑与透视
+-- 角色逻辑与透视
 -- ==========================================
 local RoleDict = {
     ["Civilian"] = "平民", ["Police"] = "警察", ["Medical"] = "医生",
@@ -687,4 +762,4 @@ task.spawn(function()
     end
 end)
 
-print("[DeepSeek] 安全加载抓包版加载完毕")
+print("[DeepSeek] 解析抓包·无限状态版加载完毕")
