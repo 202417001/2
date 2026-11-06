@@ -1,5 +1,5 @@
 -- ============================================
--- DeepSeek Studio (主线程启动 · 纯净透视)
+-- DeepSeek Studio (主线程纯净 · 多选阵营过滤)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -22,7 +22,12 @@ mainGui.Parent = container
 
 local Config = { 
     ESP = false, 
-    Highlight = false
+    Highlight = false,
+    Filters = {
+        ["平民"] = true, ["警察"] = true, ["医生"] = true,
+        ["消防员"] = true, ["厨师"] = true, ["快递员"] = true,
+        ["农夫"] = true, ["囚犯"] = true, ["其他"] = true
+    }
 }
 
 local Colors = {
@@ -36,7 +41,7 @@ local Colors = {
 }
 
 -- ==========================================
--- 2. UI 构建 (主线程执行)
+-- 2. UI 构建
 -- ==========================================
 local Main = Instance.new("Frame")
 Main.AnchorPoint = Vector2.new(0.5, 0)
@@ -215,10 +220,117 @@ local function AddCard(parent, text, toggleKey)
     end)
 end
 
+-- 【核心新增】多选下拉框生成器
+local function AddMultiSelect(parent, titleText, options, configTable)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, 44)
+    card.BackgroundColor3 = Colors.Panel
+    card.BorderSizePixel = 0
+    card.ClipsDescendants = true
+    card.Parent = parent
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+
+    local header = Instance.new("TextButton")
+    header.Size = UDim2.new(1, 0, 0, 44)
+    header.BackgroundTransparency = 1
+    header.Text = ""
+    header.Parent = card
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -60, 1, 0)
+    title.Position = UDim2.fromOffset(16, 0)
+    title.BackgroundTransparency = 1
+    title.Text = titleText
+    title.TextColor3 = Colors.TextDark
+    title.Font = Enum.Font.Gotham
+    title.TextSize = 13
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = header
+    
+    local arrow = Instance.new("TextLabel")
+    arrow.Size = UDim2.fromOffset(16, 16)
+    arrow.Position = UDim2.new(1, -24, 0.5, -8)
+    arrow.BackgroundTransparency = 1
+    arrow.Text = "▼"
+    arrow.TextColor3 = Colors.TextLight
+    arrow.TextSize = 10
+    arrow.Parent = header
+
+    local optionList = Instance.new("Frame")
+    optionList.Size = UDim2.new(1, 0, 0, 0)
+    optionList.Position = UDim2.fromOffset(0, 44)
+    optionList.BackgroundTransparency = 1
+    optionList.Parent = card
+    local optLayout = Instance.new("UIListLayout", optionList)
+    optLayout.Padding = UDim.new(0, 2)
+
+    local isExpanded = false
+    local function expand()
+        isExpanded = not isExpanded
+        local targetSize = isExpanded and UDim2.new(1, 0, 0, 44 + #options * 32 + 10) or UDim2.new(1, 0, 0, 44)
+        local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
+        TweenService:Create(card, tweenInfo, {Size = targetSize}):Play()
+        TweenService:Create(arrow, tweenInfo, {Rotation = isExpanded and 180 or 0}):Play()
+    end
+
+    header.MouseButton1Click:Connect(expand)
+
+    for _, opt in ipairs(options) do
+        local optBtn = Instance.new("TextButton")
+        optBtn.Size = UDim2.new(1, 0, 0, 30)
+        optBtn.BackgroundTransparency = 1
+        optBtn.Text = ""
+        optBtn.Parent = optionList
+
+        local optText = Instance.new("TextLabel")
+        optText.Size = UDim2.new(1, -50, 1, 0)
+        optText.Position = UDim2.fromOffset(20, 0)
+        optText.BackgroundTransparency = 1
+        optText.Text = opt
+        optText.TextColor3 = Colors.TextDark
+        optText.Font = Enum.Font.Gotham
+        optText.TextSize = 12
+        optText.TextXAlignment = Enum.TextXAlignment.Left
+        optText.Parent = optBtn
+
+        local checkBox = Instance.new("Frame")
+        checkBox.Size = UDim2.fromOffset(16, 16)
+        checkBox.Position = UDim2.new(1, -30, 0.5, -8)
+        checkBox.BackgroundColor3 = configTable[opt] and Colors.AccentBlue or Colors.Panel
+        checkBox.Parent = optBtn
+        Instance.new("UICorner", checkBox).CornerRadius = UDim.new(0, 4)
+        
+        local cbStroke = Instance.new("UIStroke", checkBox)
+        cbStroke.Color = Colors.ToggleOff
+        cbStroke.Thickness = 1
+
+        local checkMark = Instance.new("TextLabel")
+        checkMark.Size = UDim2.fromScale(1, 1)
+        checkMark.BackgroundTransparency = 1
+        checkMark.Text = "✓"
+        checkMark.TextColor3 = Colors.Panel
+        checkMark.Font = Enum.Font.GothamBold
+        checkMark.TextSize = 12
+        checkMark.Visible = configTable[opt] or false
+        checkMark.Parent = checkBox
+
+        optBtn.MouseButton1Click:Connect(function()
+            configTable[opt] = not configTable[opt]
+            local state = configTable[opt]
+            checkBox.BackgroundColor3 = state and Colors.AccentBlue or Colors.Panel
+            checkMark.Visible = state
+        end)
+    end
+end
+
 CreateNavBtn("视觉")
 local page_Visual = CreatePage("视觉")
 AddCard(page_Visual, "玩家透视", "ESP")
 AddCard(page_Visual, "人物高亮", "Highlight")
+AddMultiSelect(page_Visual, "阵营过滤 (点击展开)", 
+    {"平民", "警察", "医生", "消防员", "厨师", "快递员", "农夫", "囚犯", "其他"}, 
+    Config.Filters
+)
 SwitchPage("视觉")
 
 local isOpen = false
@@ -248,7 +360,7 @@ CapsuleBtn.MouseButton1Click:Connect(function() ToggleUI(true) end)
 CloseBtn.MouseButton1Click:Connect(function() ToggleUI(false) end)
 
 -- ==========================================
--- 3. 启动动画：三面星尘汇聚 (主线程直接调用)
+-- 3. 启动动画：三面星尘汇聚 (主线程)
 -- ==========================================
 local function PlayIntroAnimation()
     local particles = {}
@@ -307,7 +419,6 @@ local function PlayIntroAnimation()
     end)
 end
 
--- 直接在主线程运行
 PlayIntroAnimation()
 
 -- ==========================================
@@ -385,6 +496,7 @@ end)
 
 task.spawn(function()
     while task.wait(0.02) do 
+        -- 高亮渲染
         if Config.Highlight then
             local validTargets = {}
             for plr, _ in pairs(espCache) do
@@ -392,8 +504,11 @@ task.spawn(function()
                     local hrp = plr.Character:FindFirstChild("HumanoidRootPart")
                     local hum = plr.Character:FindFirstChildOfClass("Humanoid")
                     if hrp and hum and hum.Health > 0 then
-                        local dist = (Camera.CFrame.Position - hrp.Position).Magnitude
-                        table.insert(validTargets, {plr = plr, dist = dist})
+                        local rName = getRoleName(plr)
+                        if Config.Filters[rName] then
+                            local dist = (Camera.CFrame.Position - hrp.Position).Magnitude
+                            table.insert(validTargets, {plr = plr, dist = dist})
+                        end
                     end
                 end
             end
@@ -412,6 +527,7 @@ task.spawn(function()
             for i = 1, HIGHLIGHT_POOL_SIZE do highlightPool[i].Adornee = nil end
         end
         
+        -- 透视渲染
         if not Config.ESP then
             for _, d in pairs(espCache) do d.box.Visible = false; d.nameTxt.Visible = false; d.distTxt.Visible = false end
         else
@@ -422,12 +538,17 @@ task.spawn(function()
                         local head = plr.Character:FindFirstChild("Head")
                         local hum = plr.Character:FindFirstChildOfClass("Humanoid")
                         if hrp and head and hum and hum.Health > 0 then
-                            local headPos, onScreen = Camera:WorldToViewportPoint(head.Position)
-                            if onScreen then
-                                local distance = math.floor((Camera.CFrame.Position - hrp.Position).Magnitude / 3)
-                                data.box.Visible = true; data.box.Size = UDim2.fromOffset(40, 60); data.box.Position = UDim2.fromOffset(headPos.X - 20, headPos.Y + 10)
-                                data.nameTxt.Visible = true; data.nameTxt.Text = "[" .. getRoleName(plr) .. "] " .. plr.Name; data.nameTxt.TextColor3 = getRoleColor(getRoleName(plr)); data.nameTxt.Position = UDim2.fromOffset(headPos.X, headPos.Y - 10)
-                                data.distTxt.Visible = true; data.distTxt.Text = tostring(distance) .. "m"; data.distTxt.Position = UDim2.fromOffset(headPos.X, headPos.Y + 75)
+                            local rName = getRoleName(plr)
+                            if Config.Filters[rName] then
+                                local headPos, onScreen = Camera:WorldToViewportPoint(head.Position)
+                                if onScreen then
+                                    local distance = math.floor((Camera.CFrame.Position - hrp.Position).Magnitude / 3)
+                                    data.box.Visible = true; data.box.Size = UDim2.fromOffset(40, 60); data.box.Position = UDim2.fromOffset(headPos.X - 20, headPos.Y + 10)
+                                    data.nameTxt.Visible = true; data.nameTxt.Text = "[" .. rName .. "] " .. plr.Name; data.nameTxt.TextColor3 = getRoleColor(rName); data.nameTxt.Position = UDim2.fromOffset(headPos.X, headPos.Y - 10)
+                                    data.distTxt.Visible = true; data.distTxt.Text = tostring(distance) .. "m"; data.distTxt.Position = UDim2.fromOffset(headPos.X, headPos.Y + 75)
+                                else
+                                    data.box.Visible = false; data.nameTxt.Visible = false; data.distTxt.Visible = false
+                                end
                             else
                                 data.box.Visible = false; data.nameTxt.Visible = false; data.distTxt.Visible = false
                             end
@@ -443,4 +564,4 @@ task.spawn(function()
     end
 end)
 
-print("[DeepSeek] 主线程纯净版加载完毕")
+print("[DeepSeek] 纯净多选阵营版加载完毕")
