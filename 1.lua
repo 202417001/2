@@ -1,5 +1,5 @@
 -- ============================================
--- DeepSeek Studio (纯净透视 · 底层抓包诊断)
+-- DeepSeek Studio (安全加载 · 按需抓包)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -9,7 +9,6 @@ local UIS = game:GetService("UserInputService")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
--- 1. 安全容器
 local container = game:GetService("CoreGui")
 pcall(function() if gethui then container = gethui() end end)
 
@@ -42,7 +41,7 @@ local Colors = {
 }
 
 -- ==========================================
--- 2. UI 构建
+-- 2. UI 构建 (绝对优先，防卡死)
 -- ==========================================
 local Main = Instance.new("Frame")
 Main.AnchorPoint = Vector2.new(0.5, 0)
@@ -323,7 +322,6 @@ local function AddMultiSelect(parent, titleText, options, configTable)
     end
 end
 
--- 【新增】查看抓包日志按钮
 local function AddActionButton(parent, text, callback)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(1, 0, 0, 40)
@@ -349,7 +347,7 @@ AddMultiSelect(page_Visual, "阵营过滤",
 
 CreateNavBtn("抓包")
 local page_Capture = CreatePage("抓包")
-AddCard(page_Capture, "开启网络抓包", "NetworkCapture")
+AddCard(page_Capture, "开启网络抓包 (高频慎开)", "NetworkCapture")
 AddActionButton(page_Capture, "查看抓包日志", function()
     if _G.CaptureLogUI then _G.CaptureLogUI() end
 end)
@@ -383,14 +381,13 @@ CapsuleBtn.MouseButton1Click:Connect(function() ToggleUI(true) end)
 CloseBtn.MouseButton1Click:Connect(function() ToggleUI(false) end)
 
 -- ==========================================
--- 3. 抓包与日志系统核心
+-- 3. 抓包与日志系统 (防卡死，按需挂载)
 -- ==========================================
 local captureLogs = {}
 local logWindow = nil
 local logText = nil
 local logScroll = nil
 
--- 日志弹窗生成
 _G.CaptureLogUI = function()
     if logWindow and logWindow.Parent then logWindow:Destroy(); return end
     
@@ -420,7 +417,7 @@ _G.CaptureLogUI = function()
     closeBtn.Size = UDim2.fromOffset(30, 30); closeBtn.Position = UDim2.new(1, -35, 0, 2)
     closeBtn.BackgroundTransparency = 1; closeBtn.Text = "×"; closeBtn.TextColor3 = Color3.new(1,1,1)
     closeBtn.Font = Enum.Font.GothamBold; closeBtn.TextSize = 20
-    closeBtn.MouseButton1Click:Connect(function() logWindow:Destroy(); logWindow = nil end)
+    closeBtn.MouseButton1Click:Connect(function() logWindow:Destroy(); logWindow = nil; logText = nil end)
     
     logScroll = Instance.new("ScrollingFrame", logWindow)
     logScroll.Size = UDim2.new(1, -16, 1, -50); logScroll.Position = UDim2.fromOffset(8, 42)
@@ -436,42 +433,45 @@ _G.CaptureLogUI = function()
     logText.TextWrapped = true
 end
 
-if hookmetamethod then
+-- 【核心修复】按需 Hook，绝不阻塞主线程启动
+local hasHooked = false
+local function SetupCaptureHook()
+    if hasHooked or not hookmetamethod then return end
+    hasHooked = true
+    
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
         
         if not checkcaller() and Config.NetworkCapture then
             if method == "FireServer" or method == "InvokeServer" then
-                pcall(function()
-                    local name = self.Name
-                    local lower = name:lower()
-                    -- 过滤高频垃圾包
-                    if not (lower:find("rot") or lower:find("pos") or lower:find("move") or lower:find("input") or lower:find("cam") or lower:find("ping") or lower:find("chat")) then
-                        local args = {...}
-                        local argStr = ""
-                        for i, v in ipairs(args) do
-                            if typeof(v) == "Instance" then
-                                argStr = argStr .. (v.Name or "Inst") .. ", "
-                            elseif typeof(v) == "Vector3" then
-                                argStr = argStr .. string.format("V3(%.0f,%.0f,%.0f), ", v.X, v.Y, v.Z)
-                            elseif type(v) == "number" or type(v) == "string" then
-                                argStr = argStr .. tostring(v) .. ", "
-                            else
-                                argStr = argStr .. typeof(v) .. ", "
+                -- 绝对轻量，防止卡死
+                local name = self.Name
+                local lower = name:lower()
+                if not (lower:find("rot") or lower:find("pos") or lower:find("move") or lower:find("input") or lower:find("cam") or lower:find("ping")) then
+                    local args = {...}
+                    task.spawn(function()
+                        pcall(function()
+                            local argStr = ""
+                            for i = 1, math.min(#args, 4) do -- 最多抓 4 个参数防卡
+                                local v = args[i]
+                                if typeof(v) == "Instance" then argStr = argStr .. (v.Name or "Inst") .. ", "
+                                elseif typeof(v) == "Vector3" then argStr = argStr .. string.format("V3(%.0f,%.0f,%.0f), ", v.X, v.Y, v.Z)
+                                elseif type(v) == "number" or type(v) == "string" then argStr = argStr .. tostring(v) .. ", "
+                                else argStr = argStr .. typeof(v) .. ", " end
                             end
-                        end
-                        
-                        local logLine = "[" .. name .. "] " .. argStr
-                        table.insert(captureLogs, 1, logLine)
-                        if #captureLogs > 50 then table.remove(captureLogs) end
-                        
-                        if logText and logWindow then
-                            logText.Text = table.concat(captureLogs, "\n")
-                            logScroll.CanvasPosition = Vector2.new(0, 0)
-                        end
-                    end
-                end)
+                            
+                            local logLine = "[" .. name .. "] " .. argStr
+                            table.insert(captureLogs, 1, logLine)
+                            if #captureLogs > 40 then table.remove(captureLogs) end
+                            
+                            if logText and logWindow and logWindow.Parent then
+                                logText.Text = table.concat(captureLogs, "\n")
+                                logScroll.CanvasPosition = Vector2.new(0, 0)
+                            end
+                        end)
+                    end)
+                end
             end
         end
         
@@ -479,8 +479,22 @@ if hookmetamethod then
     end)
 end
 
+-- 当用户开启抓包开关时，才真正挂载 Hook
+local isCaptureOn = false
+task.spawn(function()
+    while task.wait(0.5) do
+        if Config.NetworkCapture and not isCaptureOn then
+            isCaptureOn = true
+            SetupCaptureHook()
+        elseif not Config.NetworkCapture and isCaptureOn then
+            isCaptureOn = false
+            -- 无法安全卸载 Hook，只能让逻辑停止处理
+        end
+    end
+end)
+
 -- ==========================================
--- 4. 启动动画：三面星尘汇聚
+-- 4. 启动动画 (主线程)
 -- ==========================================
 local function PlayIntroAnimation()
     local particles = {}
@@ -529,7 +543,7 @@ end
 PlayIntroAnimation()
 
 -- ==========================================
--- 5. 角色逻辑与透视 (残影修复)
+-- 5. 角色逻辑与透视
 -- ==========================================
 local RoleDict = {
     ["Civilian"] = "平民", ["Police"] = "警察", ["Medical"] = "医生",
@@ -673,4 +687,4 @@ task.spawn(function()
     end
 end)
 
-print("[DeepSeek] 抓包诊断版加载完毕")
+print("[DeepSeek] 安全加载抓包版加载完毕")
