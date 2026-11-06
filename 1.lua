@@ -44,7 +44,7 @@ local Colors = {
 }
 
 -- ==========================================
--- UI 基础构建
+-- UI 基础构建 (修复排版)
 -- ==========================================
 local Main = Instance.new("Frame")
 Main.AnchorPoint = Vector2.new(0.5, 0)
@@ -68,7 +68,10 @@ local ContentFrame = Instance.new("Frame", MainContent); ContentFrame.Size = UDi
 local Pages, NavButtons = {}, {}
 local function CreatePage(name)
     local sf = Instance.new("ScrollingFrame", ContentFrame); sf.Size = UDim2.new(1, 0, 1, 0); sf.BackgroundTransparency = 1; sf.BorderSizePixel = 0; sf.ScrollBarThickness = 3; sf.CanvasSize = UDim2.new(0, 0, 0, 0); sf.AutomaticCanvasSize = Enum.AutomaticSize.Y; sf.Visible = false
-    Instance.new("UIListLayout", sf).Padding = UDim.new(0, 8); Pages[name] = sf; return sf
+    -- 修复排版：添加 UIPadding 确保卡片不贴边
+    local layout = Instance.new("UIListLayout", sf); layout.Padding = UDim.new(0, 8)
+    local padding = Instance.new("UIPadding", sf); padding.PaddingRight = UDim.new(0, 10); padding.PaddingTop = UDim.new(0, 5)
+    Pages[name] = sf; return sf
 end
 local function SwitchPage(name)
     for pName, pFrame in pairs(Pages) do pFrame.Visible = (pName == name) end
@@ -79,7 +82,7 @@ local function CreateNavBtn(name)
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6); btn.MouseButton1Click:Connect(function() SwitchPage(name) end); NavButtons[name] = btn
 end
 local function AddCard(parent, text, toggleKey)
-    local card = Instance.new("Frame", parent); card.Size = UDim2.new(1, 0, 0, 44); card.BackgroundColor3 = Colors.Panel; Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+    local card = Instance.new("Frame", parent); card.Size = UDim2.new(1, -10, 0, 44); card.BackgroundColor3 = Colors.Panel; Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
     local lbl = Instance.new("TextLabel", card); lbl.Size = UDim2.new(1, -60, 1, 0); lbl.Position = UDim2.fromOffset(16, 0); lbl.BackgroundTransparency = 1; lbl.Text = text; lbl.TextColor3 = Colors.TextDark; lbl.Font = Enum.Font.Gotham; lbl.TextSize = 13; lbl.TextXAlignment = Enum.TextXAlignment.Left
     local track = Instance.new("Frame", card); track.Size = UDim2.fromOffset(40, 22); track.Position = UDim2.new(1, -56, 0.5, -11); track.BackgroundColor3 = Colors.ToggleOff; Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
     local knob = Instance.new("Frame", track); knob.Size = UDim2.fromOffset(18, 18); knob.Position = UDim2.fromOffset(2, 2); knob.BackgroundColor3 = Colors.Panel; Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
@@ -92,7 +95,7 @@ local function AddCard(parent, text, toggleKey)
     end)
 end
 local function AddActionButton(parent, text, callback)
-    local btn = Instance.new("TextButton", parent); btn.Size = UDim2.new(1, 0, 0, 40); btn.BackgroundColor3 = Colors.AccentBlue; btn.Text = text; btn.TextColor3 = Colors.Panel; btn.Font = Enum.Font.GothamBold; btn.TextSize = 13; Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8); btn.MouseButton1Click:Connect(callback)
+    local btn = Instance.new("TextButton", parent); btn.Size = UDim2.new(1, -10, 0, 40); btn.BackgroundColor3 = Colors.AccentBlue; btn.Text = text; btn.TextColor3 = Colors.Panel; btn.Font = Enum.Font.GothamBold; btn.TextSize = 13; Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8); btn.MouseButton1Click:Connect(callback)
 end
 
 CreateNavBtn("视觉"); local page_Visual = CreatePage("视觉"); AddCard(page_Visual, "玩家透视", "ESP"); AddCard(page_Visual, "人物高亮", "Highlight")
@@ -110,7 +113,7 @@ end
 CapsuleBtn.MouseButton1Click:Connect(function() ToggleUI(true) end)
 
 -- ==========================================
--- 日志系统 (极简)
+-- 日志系统
 -- ==========================================
 local captureLogs = {}
 local logWindow, logText, logScroll = nil, nil, nil
@@ -127,11 +130,11 @@ _G.CaptureLogUI = function()
 end
 
 -- ==========================================
--- 【核心】底层包拦截与篡改
+-- 【核心】底层包拦截与篡改 (终于对了)
 -- ==========================================
 local lastFireTime = 0
-
 local hasHooked = false
+
 local function SetupHook()
     if hasHooked or not hookmetamethod then return end
     hasHooked = true
@@ -140,32 +143,34 @@ local function SetupHook()
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
         
-        if not checkcaller() then
-            -- 1. 无限状态拦截
-            if Config.InfiniteFood and (method == "FireServer" or method == "InvokeServer") and self.Name == "setStaminaOrFood" then
-                local args = {...}
-                if #args >= 2 then
-                    -- 强制把参数 2 改为 100 甚至 999
-                    args[2] = 100 
+        -- 所有的网络请求都走这里，事件名统一是 "PlayerEvent"
+        if not checkcaller() and method == "FireServer" and self.Name == "PlayerEvent" then
+            local args = {...}
+            local action = args[1]
+            
+            -- 1. 无限状态 (setStaminaOrFood, stamina, 94)
+            if Config.InfiniteFood and action == "setStaminaOrFood" then
+                -- 参数 2 是 "stamina" 或 "food"，参数 3 是数值
+                if args[2] == "stamina" or args[2] == "food" then
+                    args[3] = 100 -- 直接把数值改成 100
                 end
                 return oldNamecall(self, unpack(args))
             end
             
-            -- 2. 杀戮 & 静默追踪 (拦截 bullet 包)
-            if Config.KillAura and method == "FireServer" and self.Name == "bullet" then
+            -- 2. 杀戮 & 子弹追踪 (bullet, table)
+            if Config.KillAura and action == "bullet" then
                 local now = tick()
-                if now - lastFireTime < 0.2 then return oldNamecall(self, ...) end -- 射速限制
+                if now - lastFireTime < 0.1 then return oldNamecall(self, ...) end -- 稍微限制，防踢
                 lastFireTime = now
                 
-                local args = {...}
-                local bulletData = args[1]
-                
-                -- 验证数据是 table 且包含位置信息
+                local bulletData = args[2]
+                -- 验证数据是 table 且包含 pos 位置信息
                 if type(bulletData) == "table" and bulletData.pos then
                     local myHRP = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
                     if myHRP then
                         local targetsHit = false
                         
+                        -- 遍历范围内的所有人
                         for _, plr in ipairs(Players:GetPlayers()) do
                             if plr ~= LP and plr.Character then
                                 local tgtHRP = plr.Character:FindFirstChild("HumanoidRootPart")
@@ -176,28 +181,28 @@ local function SetupHook()
                                     local dist = (myHRP.Position - tgtHRP.Position).Magnitude
                                     if dist <= (Config.KillRange * 3) then
                                         targetsHit = true
-                                        -- 复制一份原始的 table，防止覆盖
+                                        -- 浅拷贝原始的 table，防止污染
                                         local newData = {}
                                         for k, v in pairs(bulletData) do newData[k] = v end
                                         
-                                        -- 关键篡改：把落点改到敌人头部！
+                                        -- 【终极篡改】把子弹落点改成敌人的头部坐标！
                                         newData.pos = tgtHead.Position
                                         
-                                        -- 异步发送篡改后的子弹包
+                                        -- 异步把篡改后的子弹包疯狂发出去
                                         task.spawn(function()
                                             pcall(function()
-                                                self:FireServer(newData)
+                                                self:FireServer("bullet", newData)
                                             end)
                                         end)
                                         
-                                        task.wait(0.02) -- 稍微给服务器一点处理时间
+                                        task.wait(0.01) -- 稍微给服务器一点处理时间
                                     end
                                 end
                             end
                         end
                         
                         if targetsHit then
-                            -- 把原本打空地的包吞掉，不发出去
+                            -- 吞掉原本打空地的包，不发给服务器
                             return 
                         end
                     end
@@ -205,11 +210,11 @@ local function SetupHook()
             end
             
             -- 3. 抓包日志
-            if Config.NetworkCapture and (method == "FireServer" or method == "InvokeServer") then
+            if Config.NetworkCapture then
                 local name = self.Name
-                local lower = name:lower()
-                if not (lower:find("rot") or lower:find("pos") or lower:find("move") or lower:find("input") or lower:find("cam") or lower:find("ping") or lower:find("charrot")) then
-                    local args = {...}
+                if action == "charRot" or action == "humFloor" or action == "humState" then 
+                    -- 过滤高频垃圾
+                else
                     task.spawn(function()
                         pcall(function()
                             local argStr = ""
@@ -237,7 +242,7 @@ end
 SetupHook()
 
 -- ==========================================
--- 启动动画与透视
+-- 启动动画与透视 (原样保留)
 -- ==========================================
 local function PlayIntroAnimation()
     local particles = {}
