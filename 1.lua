@@ -1,5 +1,5 @@
 -- ============================================
--- DeepSeek Studio (抓包解析 · 状态修改 · 子弹追踪)
+-- DeepSeek Studio (拔出枪即范围杀戮 · 深度防封)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -24,8 +24,9 @@ local Config = {
     Highlight = false,
     NetworkCapture = false,
     InfiniteFood = false,
-    SilentAim = false,
-    FOV = 150,
+    KillAura = false,
+    KillRange = 30, 
+    HitCount = 2, 
     Filters = {
         ["平民"] = true, ["警察"] = true, ["医生"] = true,
         ["消防员"] = true, ["厨师"] = true, ["快递员"] = true,
@@ -44,7 +45,7 @@ local Colors = {
 }
 
 -- ==========================================
--- UI 构建 (绝对保底)
+-- UI 基础构建
 -- ==========================================
 local Main = Instance.new("Frame")
 Main.AnchorPoint = Vector2.new(0.5, 0)
@@ -223,6 +224,81 @@ local function AddCard(parent, text, toggleKey)
     end)
 end
 
+local function AddSlider(parent, text, minVal, maxVal, defaultVal, callback)
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(1, 0, 0, 60)
+    card.BackgroundColor3 = Colors.Panel
+    card.BorderSizePixel = 0
+    card.Parent = parent
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0, 8)
+    
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -30, 0, 20)
+    lbl.Position = UDim2.fromOffset(16, 6)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = text .. ": " .. defaultVal
+    lbl.TextColor3 = Colors.TextDark
+    lbl.Font = Enum.Font.Gotham
+    lbl.TextSize = 13
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = card
+
+    local track = Instance.new("Frame")
+    track.Size = UDim2.new(1, -32, 0, 6)
+    track.Position = UDim2.new(0, 16, 1, -16)
+    track.BackgroundColor3 = Colors.ToggleOff
+    track.BorderSizePixel = 0
+    track.Parent = card
+    Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
+
+    local fill = Instance.new("Frame")
+    fill.Size = UDim2.new((defaultVal-minVal)/(maxVal-minVal), 0, 1, 0)
+    fill.BackgroundColor3 = Colors.AccentBlue
+    fill.BorderSizePixel = 0
+    fill.Parent = track
+    Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
+
+    local knob = Instance.new("Frame")
+    knob.Size = UDim2.fromOffset(16, 16)
+    knob.Position = UDim2.new((defaultVal-minVal)/(maxVal-minVal), -8, 0.5, 0)
+    knob.AnchorPoint = Vector2.new(0, 0.5)
+    knob.BackgroundColor3 = Colors.Panel
+    knob.Parent = track
+    Instance.new("UICorner", knob).CornerRadius = UDim.new(1, 0)
+
+    local touchArea = Instance.new("TextButton")
+    touchArea.Size = UDim2.new(1, 0, 1, 0)
+    touchArea.BackgroundTransparency = 1
+    touchArea.Text = ""
+    touchArea.Parent = card
+
+    local isDragging = false
+    local function updateVal(xPos)
+        local relX = math.clamp((xPos - track.AbsolutePosition.X) / track.AbsoluteSize.X, 0, 1)
+        local val = math.floor(minVal + (maxVal - minVal) * relX)
+        fill.Size = UDim2.new(relX, 0, 1, 0)
+        knob.Position = UDim2.new(relX, -8, 0.5, 0)
+        lbl.Text = text .. ": " .. val
+        callback(val)
+    end
+
+    touchArea.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isDragging = true; updateVal(input.Position.X)
+        end
+    end)
+    UIS.InputChanged:Connect(function(input)
+        if isDragging and (input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseMovement) then
+            updateVal(input.Position.X)
+        end
+    end)
+    UIS.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+            isDragging = false
+        end
+    end)
+end
+
 local function AddMultiSelect(parent, titleText, options, configTable)
     local card = Instance.new("Frame")
     card.Size = UDim2.new(1, 0, 0, 44)
@@ -350,13 +426,15 @@ AddMultiSelect(page_Visual, "阵营过滤",
 
 CreateNavBtn("战斗")
 local page_Combat = CreatePage("战斗")
-AddCard(page_Combat, "无限饥饿/耐力", "InfiniteFood")
-AddCard(page_Combat, "子弹追踪 (静默)", "SilentAim")
+AddCard(page_Combat, "无限状态", "InfiniteFood")
+AddCard(page_Combat, "拔出武器即杀戮", "KillAura")
+AddSlider(page_Combat, "杀戮范围 (米)", 10, 150, Config.KillRange, function(v) Config.KillRange = v end)
+AddSlider(page_Combat, "攻击次数", 1, 10, Config.HitCount, function(v) Config.HitCount = v end)
 
 CreateNavBtn("抓包")
 local page_Capture = CreatePage("抓包")
 AddCard(page_Capture, "开启网络抓包", "NetworkCapture")
-AddActionButton(page_Capture, "查看抓包日志", function()
+AddActionButton(page_Capture, "查看深度抓包日志", function()
     if _G.CaptureLogUI then _G.CaptureLogUI() end
 end)
 
@@ -389,146 +467,129 @@ CapsuleBtn.MouseButton1Click:Connect(function() ToggleUI(true) end)
 CloseBtn.MouseButton1Click:Connect(function() ToggleUI(false) end)
 
 -- ==========================================
--- 日志系统 UI 修复 (增加换行和清理)
+-- 日志系统
 -- ==========================================
 local captureLogs = {}
 local logWindow = nil
 local logText = nil
 local logScroll = nil
 
+local function parseValue(v, depth)
+    depth = depth or 0
+    if depth > 3 then return "..." end
+    if typeof(v) == "Instance" then return v.Name
+    elseif typeof(v) == "Vector3" then return string.format("V3(%.1f, %.1f, %.1f)", v.X, v.Y, v.Z)
+    elseif typeof(v) == "Vector2" then return string.format("V2(%.1f, %.1f)", v.X, v.Y)
+    elseif typeof(v) == "CFrame" then return "CFrame"
+    elseif typeof(v) == "table" then
+        local t = "{ "
+        local count = 0
+        for k, val in pairs(v) do
+            if count >= 4 then t = t .. "..." break end
+            if type(k) == "number" then t = t .. parseValue(val, depth + 1) .. ", "
+            else t = t .. tostring(k) .. ":" .. parseValue(val, depth + 1) .. ", " end
+            count = count + 1
+        end
+        return t .. " }"
+    elseif type(v) == "string" then return '"' .. v .. '"'
+    else return tostring(v) end
+end
+
 _G.CaptureLogUI = function()
     if logWindow and logWindow.Parent then logWindow:Destroy(); return end
-    
-    logWindow = Instance.new("Frame")
-    logWindow.Size = UDim2.fromOffset(400, 250)
-    logWindow.Position = UDim2.new(0.5, 0, 0.5, 0)
-    logWindow.AnchorPoint = Vector2.new(0.5, 0.5)
-    logWindow.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-    logWindow.BorderSizePixel = 0
-    logWindow.ZIndex = 50
-    logWindow.Parent = mainGui
-    Instance.new("UICorner", logWindow).CornerRadius = UDim.new(0, 12)
-    Instance.new("UIStroke", logWindow).Color = Color3.new(0.3,0.3,0.3)
-    
-    local topBar = Instance.new("Frame", logWindow)
-    topBar.Size = UDim2.new(1, 0, 0, 35); topBar.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-    topBar.BorderSizePixel = 0; Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 12)
-    
-    local title = Instance.new("TextLabel", topBar)
-    title.Size = UDim2.new(1, -80, 1, 0); title.Position = UDim2.fromOffset(12, 0)
-    title.BackgroundTransparency = 1; title.Text = "网络抓包日志"
-    title.TextColor3 = Color3.new(1,1,1); title.Font = Enum.Font.GothamBold; title.TextSize = 13
-    title.TextXAlignment = Enum.TextXAlignment.Left
-    
-    -- 【新增】清理按钮
-    local clearBtn = Instance.new("TextButton", topBar)
-    clearBtn.Size = UDim2.fromOffset(40, 24); clearBtn.Position = UDim2.new(1, -75, 0, 5)
-    clearBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50); clearBtn.Text = "清理"
-    clearBtn.TextColor3 = Color3.new(1,1,1); clearBtn.Font = Enum.Font.GothamBold; clearBtn.TextSize = 11
-    Instance.new("UICorner", clearBtn).CornerRadius = UDim.new(0, 6)
-    clearBtn.MouseButton1Click:Connect(function()
-        captureLogs = {}
-        if logText then logText.Text = "" end
-    end)
-    
-    local closeBtn = Instance.new("TextButton", topBar)
-    closeBtn.Size = UDim2.fromOffset(30, 30); closeBtn.Position = UDim2.new(1, -35, 0, 2)
-    closeBtn.BackgroundTransparency = 1; closeBtn.Text = "×"; closeBtn.TextColor3 = Color3.new(1,1,1)
-    closeBtn.Font = Enum.Font.GothamBold; closeBtn.TextSize = 20
-    closeBtn.MouseButton1Click:Connect(function() logWindow:Destroy(); logWindow = nil; logText = nil end)
-    
-    logScroll = Instance.new("ScrollingFrame", logWindow)
-    logScroll.Size = UDim2.new(1, -16, 1, -50); logScroll.Position = UDim2.fromOffset(8, 42)
-    logScroll.BackgroundTransparency = 1; logScroll.BorderSizePixel = 0
-    logScroll.ScrollBarThickness = 3; logScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    logScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    
-    logText = Instance.new("TextLabel", logScroll)
-    logText.Size = UDim2.new(1, -10, 0, 0); logText.AutomaticSize = Enum.AutomaticSize.Y
-    logText.BackgroundTransparency = 1; logText.Text = table.concat(captureLogs, "\n")
-    logText.TextColor3 = Color3.fromRGB(0, 255, 150); logText.Font = Enum.Font.Code; logText.TextSize = 11
-    logText.TextXAlignment = Enum.TextXAlignment.Left; logText.TextYAlignment = Enum.TextYAlignment.Top
-    logText.TextWrapped = true
+    logWindow = Instance.new("Frame", mainGui); logWindow.Size = UDim2.fromOffset(400, 250); logWindow.Position = UDim2.new(0.5, 0, 0.5, 0); logWindow.AnchorPoint = Vector2.new(0.5, 0.5); logWindow.BackgroundColor3 = Color3.fromRGB(20, 20, 25); logWindow.ZIndex = 50; Instance.new("UICorner", logWindow).CornerRadius = UDim.new(0, 12); Instance.new("UIStroke", logWindow).Color = Color3.new(0.3,0.3,0.3)
+    local topBar = Instance.new("Frame", logWindow); topBar.Size = UDim2.new(1, 0, 0, 35); topBar.BackgroundColor3 = Color3.fromRGB(30, 30, 35); Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 12)
+    local title = Instance.new("TextLabel", topBar); title.Size = UDim2.new(1, -80, 1, 0); title.Position = UDim2.fromOffset(12, 0); title.BackgroundTransparency = 1; title.Text = "深度抓包日志"; title.TextColor3 = Color3.new(1,1,1); title.Font = Enum.Font.GothamBold; title.TextSize = 13; title.TextXAlignment = Enum.TextXAlignment.Left
+    local clearBtn = Instance.new("TextButton", topBar); clearBtn.Size = UDim2.fromOffset(40, 24); clearBtn.Position = UDim2.new(1, -75, 0, 5); clearBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50); clearBtn.Text = "清理"; clearBtn.TextColor3 = Color3.new(1,1,1); clearBtn.Font = Enum.Font.GothamBold; clearBtn.TextSize = 11; Instance.new("UICorner", clearBtn).CornerRadius = UDim.new(0, 6)
+    clearBtn.MouseButton1Click:Connect(function() captureLogs = {}; if logText then logText.Text = "" end end)
+    local closeBtn = Instance.new("TextButton", topBar); closeBtn.Size = UDim2.fromOffset(30, 30); closeBtn.Position = UDim2.new(1, -35, 0, 2); closeBtn.BackgroundTransparency = 1; closeBtn.Text = "×"; closeBtn.TextColor3 = Color3.new(1,1,1); closeBtn.Font = Enum.Font.GothamBold; closeBtn.TextSize = 20; closeBtn.MouseButton1Click:Connect(function() logWindow:Destroy(); logWindow = nil; logText = nil end)
+    logScroll = Instance.new("ScrollingFrame", logWindow); logScroll.Size = UDim2.new(1, -16, 1, -50); logScroll.Position = UDim2.fromOffset(8, 42); logScroll.BackgroundTransparency = 1; logScroll.BorderSizePixel = 0; logScroll.ScrollBarThickness = 3; logScroll.CanvasSize = UDim2.new(0, 0, 0, 0); logScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    logText = Instance.new("TextLabel", logScroll); logText.Size = UDim2.new(1, -10, 0, 0); logText.AutomaticSize = Enum.AutomaticSize.Y; logText.BackgroundTransparency = 1; logText.Text = table.concat(captureLogs, "\n"); logText.TextColor3 = Color3.fromRGB(0, 255, 150); logText.Font = Enum.Font.Code; logText.TextSize = 11; logText.TextXAlignment = Enum.TextXAlignment.Left; logText.TextYAlignment = Enum.TextYAlignment.Top; logText.TextWrapped = true
 end
 
 -- ==========================================
--- 底层 Hook 逻辑 (按需挂载 + 拦截修改)
+-- 杀戮与无限状态 Hook
 -- ==========================================
-local cachedTarget = nil
--- 找目标
-task.spawn(function()
-    while task.wait(0.05) do
-        if Config.SilentAim then
-            local closest, minDist = nil, math.huge
-            local center = Camera.ViewportSize / 2
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr ~= LP and plr.Character then
-                    local part = plr.Character:FindFirstChild("Head") or plr.Character:FindFirstChild("HumanoidRootPart")
-                    local thum = plr.Character:FindFirstChildOfClass("Humanoid")
-                    if part and thum and thum.Health > 0 then
-                        local screenPos, onScreen = Camera:WorldToViewportPoint(part.Position)
-                        if onScreen then
-                            local distToCenter = (Vector2.new(screenPos.X, screenPos.Y) - center).Magnitude
-                            if distToCenter <= Config.FOV then
-                                local dist3D = (Camera.CFrame.Position - part.Position).Magnitude
-                                if dist3D < minDist then minDist = dist3D; closest = part end
+local lastAttackTime = 0
+local function ExecuteWeaponKill(tool)
+    if not Config.KillAura then return end
+    local currentTime = tick()
+    if currentTime - lastAttackTime < 1.0 then return end
+    lastAttackTime = currentTime
+
+    local myChar = LP.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
+
+    local hitTargets = {}
+
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LP and plr.Character then
+            local tgtHRP = plr.Character:FindFirstChild("HumanoidRootPart")
+            local tgtHum = plr.Character:FindFirstChildOfClass("Humanoid")
+            
+            if tgtHRP and tgtHum and tgtHum.Health > 0 then
+                local dist = (myHRP.Position - tgtHRP.Position).Magnitude
+                if dist <= (Config.KillRange * 3) then
+                    if not hitTargets[plr.Character] then
+                        hitTargets[plr.Character] = true
+                        task.spawn(function()
+                            for i = 1, Config.HitCount do
+                                if math.random(1, 100) > 25 then
+                                    pcall(function() tool:Activate() end)
+                                    local handle = tool:FindFirstChild("Handle")
+                                    if handle and firetouchinterest then
+                                        for _, part in ipairs(plr.Character:GetChildren()) do
+                                            if part:IsA("BasePart") then
+                                                pcall(function()
+                                                    firetouchinterest(handle, part, 0)
+                                                    task.wait(math.random(15, 40) / 1000)
+                                                    firetouchinterest(handle, part, 1)
+                                                end)
+                                            end
+                                        end
+                                    end
+                                end
+                                task.wait(math.random(20, 60) / 1000)
                             end
-                        end
+                        end)
                     end
                 end
             end
-            cachedTarget = closest
-        else
-            cachedTarget = nil
         end
     end
-end)
+end
+
+-- 监听装备
+local function onCharacterAdded(char)
+    char.ChildAdded:Connect(function(child)
+        if child:IsA("Tool") then
+            task.wait(0.1)
+            ExecuteWeaponKill(child)
+        end
+    end)
+    local currentTool = char:FindFirstChildOfClass("Tool")
+    if currentTool then ExecuteWeaponKill(currentTool) end
+end
+if LP.Character then onCharacterAdded(LP.Character) end
+LP.CharacterAdded:Connect(onCharacterAdded)
 
 local hasHooked = false
 local function SetupHook()
     if hasHooked or not hookmetamethod then return end
     hasHooked = true
-    
     local oldNamecall
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
-        
         if not checkcaller() then
-            -- 【核心逻辑 1】无限饥饿/耐力 (拦截 setStaminaOrFood)
+            -- 无限状态
             if Config.InfiniteFood and method == "FireServer" and self.Name == "setStaminaOrFood" then
                 local args = {...}
-                if #args >= 2 and (args[1] == "food" or args[1] == "stamina") then
-                    args[2] = 100 -- 强制设为 100
-                end
+                if #args >= 2 and (args[1] == "food" or args[1] == "stamina") then args[2] = 100 end
                 return oldNamecall(self, unpack(args))
             end
             
-            -- 【核心逻辑 2】子弹追踪 (拦截 bullet)
-            if Config.SilentAim and method == "FireServer" and self.Name == "bullet" and cachedTarget then
-                local args = {...}
-                -- 修改参数，如果参数里有 table，尝试篡改目标
-                -- 由于不知 table 结构，直接尝试把目标的 CFrame 塞进去或者替换参数
-                local myHRP = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-                if myHRP then
-                    -- 这里我们用静默自瞄逻辑：保证方向对准敌人
-                    -- 因为日志里写的是 bullet, table，很可能 table 里有 CFrame，我们直接强改方向
-                end
-                -- 兜底：如果静默拦截不到，直接用原有的 Raycast 拦截
-            end
-            
-            -- 【旧版 Raycast 拦截兜底】
-            if Config.SilentAim and cachedTarget and method == "Raycast" then
-                local args = {...}
-                if typeof(args[1]) == "Vector3" and typeof(args[2]) == "Vector3" then
-                    local myHRP = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-                    if myHRP and (args[1] - myHRP.Position).Magnitude < 15 then
-                        args[2] = (cachedTarget.Position - args[1]).Unit * 9999
-                        return oldNamecall(self, unpack(args))
-                    end
-                end
-            end
-            
-            -- 【日志抓取】
+            -- 深度抓包
             if Config.NetworkCapture and (method == "FireServer" or method == "InvokeServer") then
                 local name = self.Name
                 local lower = name:lower()
@@ -537,89 +598,42 @@ local function SetupHook()
                     task.spawn(function()
                         pcall(function()
                             local argStr = ""
-                            for i = 1, math.min(#args, 4) do
-                                local v = args[i]
-                                if typeof(v) == "Instance" then argStr = argStr .. (v.Name or "Inst") .. ", "
-                                elseif typeof(v) == "Vector3" then argStr = argStr .. string.format("V3(%.0f,%.0f,%.0f), ", v.X, v.Y, v.Z)
-                                elseif typeof(v) == "Vector2" then argStr = argStr .. string.format("V2(%.0f,%.0f), ", v.X, v.Y)
-                                elseif typeof(v) == "CFrame" then argStr = argStr .. "CFrame, "
-                                elseif typeof(v) == "table" then argStr = argStr .. "table, "
-                                elseif type(v) == "number" or type(v) == "string" then argStr = argStr .. tostring(v) .. ", "
-                                else argStr = argStr .. typeof(v) .. ", " end
-                            end
-                            
+                            for i = 1, math.min(#args, 4) do argStr = argStr .. parseValue(args[i]) .. ", " end
                             local logLine = "[" .. name .. "] " .. argStr
                             table.insert(captureLogs, 1, logLine)
-                            if #captureLogs > 40 then table.remove(captureLogs) end
-                            
-                            if logText and logWindow and logWindow.Parent then
-                                logText.Text = table.concat(captureLogs, "\n")
-                                logScroll.CanvasPosition = Vector2.new(0, 0)
-                            end
+                            if #captureLogs > 30 then table.remove(captureLogs) end
+                            if logText and logWindow and logWindow.Parent then logText.Text = table.concat(captureLogs, "\n") end
                         end)
                     end)
                 end
             end
         end
-        
         return oldNamecall(self, ...)
     end)
 end
-
 SetupHook()
 
 -- ==========================================
--- 启动动画：三面星尘汇聚
+-- 启动动画与透视
 -- ==========================================
 local function PlayIntroAnimation()
     local particles = {}
-    local PARTICLE_COUNT = 70
-    local targetX, targetY = 0.5, 0.05 
-    
-    for i = 1, PARTICLE_COUNT do
-        local dot = Instance.new("Frame")
-        dot.BackgroundColor3 = Color3.new(1, 1, 1)
-        dot.BorderSizePixel = 0
-        dot.ZIndex = 100
-        dot.Parent = mainGui
-        
-        local size = math.random(2, 5)
-        dot.Size = UDim2.fromOffset(size, size)
-        Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
-        
-        local startX, startY
-        local edge = math.random(1, 3)
-        if edge == 1 then startX = 0; startY = math.random(0, 100) / 100
-        elseif edge == 2 then startX = 1; startY = math.random(0, 100) / 100
-        else startX = math.random(0, 100) / 100; startY = 1 end
-        
+    for i = 1, 70 do
+        local dot = Instance.new("Frame", mainGui); dot.BackgroundColor3 = Color3.new(1, 1, 1); dot.BorderSizePixel = 0; dot.ZIndex = 100
+        local size = math.random(2, 5); dot.Size = UDim2.fromOffset(size, size); Instance.new("UICorner", dot).CornerRadius = UDim.new(1, 0)
+        local edge = math.random(1, 3); local startX, startY
+        if edge == 1 then startX = 0; startY = math.random(0, 100) / 100 elseif edge == 2 then startX = 1; startY = math.random(0, 100) / 100 else startX = math.random(0, 100) / 100; startY = 1 end
         dot.Position = UDim2.new(startX, 0, startY, 0)
-        local endX = targetX + (math.random(-20, 20) / 1000)
-        local endY = targetY + (math.random(-20, 20) / 1000)
-        
         table.insert(particles, dot)
-        
-        task.delay(math.random(0, 30) / 100, function()
-            if dot and dot.Parent then
-                TweenService:Create(dot, TweenInfo.new(math.random(30, 60) / 100, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-                    Position = UDim2.new(endX, 0, endY, 0),
-                    BackgroundTransparency = 1
-                }):Play()
-            end
-        end)
+        task.delay(math.random(0, 30) / 100, function() if dot and dot.Parent then TweenService:Create(dot, TweenInfo.new(math.random(30, 60) / 100, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Position = UDim2.new(0.5, 0, 0.05, 0), BackgroundTransparency = 1}):Play() end end)
     end
-    
     task.delay(1.0, function()
         for _, dot in ipairs(particles) do if dot then dot:Destroy() end end
-        Main.Visible = true
-        TweenService:Create(Main, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.fromOffset(110, 32)}):Play()
+        Main.Visible = true; TweenService:Create(Main, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.fromOffset(110, 32)}):Play()
     end)
 end
 PlayIntroAnimation()
 
--- ==========================================
--- 角色逻辑与透视
--- ==========================================
 local RoleDict = {
     ["Civilian"] = "平民", ["Police"] = "警察", ["Medical"] = "医生",
     ["Chef"] = "厨师", ["Delivery"] = "快递员", ["Farmer"] = "农夫",
@@ -762,4 +776,4 @@ task.spawn(function()
     end
 end)
 
-print("[DeepSeek] 解析抓包·无限状态版加载完毕")
+print("[DeepSeek] 拔出即死杀戮版加载完毕")
