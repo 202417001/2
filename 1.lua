@@ -1,10 +1,11 @@
 -- ============================================
--- DeepSeek Studio (本地/网络双端拦截 · 彻底防闪退)
+-- DeepSeek Studio (纯血杀戮 · 独立发包防闪退)
 -- ============================================
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
+local UIS = game:GetService("UserInputService")
 local LP = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 
@@ -26,7 +27,7 @@ local Config = {
 local Colors = { Bg = Color3.fromRGB(240, 242, 245), Panel = Color3.fromRGB(255, 255, 255), Sidebar = Color3.fromRGB(235, 237, 240), TextDark = Color3.fromRGB(30, 30, 30), TextLight = Color3.fromRGB(120, 120, 120), AccentBlue = Color3.fromRGB(0, 110, 255), ToggleOff = Color3.fromRGB(200, 200, 200) }
 
 -- ==========================================
--- UI 构建 (原汁原味)
+-- UI 构建
 -- ==========================================
 local Main = Instance.new("Frame")
 Main.AnchorPoint = Vector2.new(0.5, 0)
@@ -121,7 +122,7 @@ _G.CaptureLogUI = function()
 end
 
 -- ==========================================
--- 【本地拦截】无限状态双保险锁
+-- 1. 独立状态锁
 -- ==========================================
 task.spawn(function()
     while task.wait(0.1) do
@@ -129,26 +130,11 @@ task.spawn(function()
             pcall(function()
                 local char = LP.Character
                 local hum = char and char:FindFirstChildOfClass("Humanoid")
-                if hum then
-                    -- 强制把 Humanoid 状态的 Tired 和 Starving 关闭
-                    hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, true) 
-                    hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-                end
-                
-                -- 锁死所有本地属性
-                local keys = {"Stamina", "Energy", "stamina", "food", "Food", "Hunger"}
+                if hum then hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false) end
+                local keys = {"Stamina", "Energy", "stamina", "food", "Food"}
                 for _, k in ipairs(keys) do
                     if type(LP:GetAttribute(k)) == "number" then LP:SetAttribute(k, 100) end
                     if char and type(char:GetAttribute(k)) == "number" then char:SetAttribute(k, 100) end
-                end
-                
-                if char then
-                    for _, v in ipairs(char:GetDescendants()) do
-                        local n = v.Name:lower()
-                        if (n:find("stamina") or n:find("food") or n:find("hunger")) and (v:IsA("NumberValue") or v:IsA("IntValue")) then
-                            v.Value = 100
-                        end
-                    end
                 end
             end)
         end
@@ -156,81 +142,85 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- 【网络拦截 & 杀戮】
--- ==========================================
+-- 2. 【核心】独立线程纯血杀戮 (永不闪退)
+-- ============================================
+local lastFire = 0
+local PlayerEventRemote = nil
+pcall(function()
+    local rs = game:GetService("ReplicatedStorage")
+    local remoteFolder = rs:FindFirstChild("Remote") or rs:FindFirstChild("Remotes") or rs:FindFirstChild("Events")
+    if remoteFolder then
+        PlayerEventRemote = remoteFolder:FindFirstChild("PlayerEvent")
+    else
+        for _, v in ipairs(rs:GetDescendants()) do
+            if v:IsA("RemoteEvent") and v.Name == "PlayerEvent" then PlayerEventRemote = v break end
+        end
+    end
+end)
+
+task.spawn(function()
+    while task.wait(0.2) do -- 限制循环频率，防卡死防封
+        if Config.KillAura and PlayerEventRemote then
+            local char = LP.Character
+            local tool = char and char:FindFirstChildOfClass("Tool")
+            local myHRP = char and char:FindFirstChild("HumanoidRootPart")
+            
+            if tool and myHRP and tool:FindFirstChild("Handle") then
+                local now = tick()
+                if now - lastFire < 0.2 then continue end
+                lastFire = now
+                
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    if plr ~= LP and plr.Character then
+                        local tgtHRP = plr.Character:FindFirstChild("HumanoidRootPart")
+                        local tgtHead = plr.Character:FindFirstChild("Head")
+                        local tgtHum = plr.Character:FindFirstChildOfClass("Humanoid")
+                        
+                        if tgtHRP and tgtHead and tgtHum and tgtHum.Health > 0 then
+                            local dist = (myHRP.Position - tgtHRP.Position).Magnitude
+                            if dist <= (Config.KillRange * 3) then
+                                -- 构造纯正原版格式的弹道包
+                                local fakeData = {
+                                    weaponName = tool.Name,
+                                    posDestroyX = math.random(3000, 3500),
+                                    pos = tgtHead.Position -- 瞄准头部
+                                }
+                                -- 异步隔离发送，绝不阻塞主线程
+                                task.spawn(function()
+                                    pcall(function()
+                                        PlayerEventRemote:FireServer("bullet", fakeData)
+                                    end)
+                                end)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- Hook 仅用于日志抓取和状态篡改，剔除子弹拦截避免闪退
 local hasHooked = false
 local function SetupHook()
     if hasHooked or not hookmetamethod then return end
     hasHooked = true
     local oldNamecall
-    
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
-        
         if not checkcaller() and method == "FireServer" and self.Name == "PlayerEvent" then
             local args = {...}
             local action = args[1]
             
-            -- 【修复 1：拦截 tired 和 starving 布尔值】
             if Config.InfiniteFood then
                 if action == "tired" or action == "starving" then
-                    -- 直接阻止发送，本地锁已经保证你不累不饿
-                    return 
+                    return oldNamecall(self, action, args[2], false)
                 end
                 if action == "setStaminaOrFood" then
-                    -- 把发包数值改成 100
-                    args[3] = 100
-                    return oldNamecall(self, "setStaminaOrFood", args[2], 100)
+                    return oldNamecall(self, action, args[2], 100)
                 end
             end
             
-            -- 【修复 2：子弹追踪，独立发出新包，绝不二次调用原包】
-            if Config.KillAura and action == "bullet" then
-                local bulletData = args[2]
-                if type(bulletData) == "table" then
-                    local myHRP = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
-                    if myHRP then
-                        -- 吞掉原本打空地的包
-                        local targetsHit = false
-                        
-                        for _, plr in ipairs(Players:GetPlayers()) do
-                            if plr ~= LP and plr.Character then
-                                local tgtHRP = plr.Character:FindFirstChild("HumanoidRootPart")
-                                local tgtHead = plr.Character:FindFirstChild("Head")
-                                local tgtHum = plr.Character:FindFirstChildOfClass("Humanoid")
-                                
-                                if tgtHRP and tgtHead and tgtHum and tgtHum.Health > 0 then
-                                    local dist = (myHRP.Position - tgtHRP.Position).Magnitude
-                                    if dist <= (Config.KillRange * 3) then
-                                        targetsHit = true
-                                        
-                                        -- 伪造全新的 table
-                                        local newData = {
-                                            weaponName = bulletData.weaponName or "PD Glock 17",
-                                            posDestroyX = bulletData.posDestroyX or math.random(3000, 3500),
-                                            pos = tgtHead.Position -- 核心：打头
-                                        }
-                                        
-                                        -- 用协程独立发出，不阻塞主线程，不产生递归
-                                        task.spawn(function()
-                                            pcall(function()
-                                                self:FireServer("bullet", newData)
-                                            end)
-                                        end)
-                                        task.wait(0.02) -- 微小间隔
-                                    end
-                                end
-                            end
-                        end
-                        
-                        if targetsHit then
-                            return -- 吞掉原始包
-                        end
-                    end
-                end
-            end
-            
-            -- 抓包日志
             if Config.NetworkCapture then
                 if action ~= "charRot" and action ~= "humFloor" and action ~= "humState" and action ~= "charCheckpoint" then
                     task.spawn(function()
@@ -253,7 +243,6 @@ local function SetupHook()
                 end
             end
         end
-        
         return oldNamecall(self, ...)
     end)
 end
@@ -420,4 +409,4 @@ task.spawn(function()
     end
 end)
 
-print("[DeepSeek] 本地网络双端封锁版加载完毕")
+print("[DeepSeek] 纯血杀戮·独立线程防闪退版加载完毕")
