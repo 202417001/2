@@ -26,7 +26,7 @@ local Config = {
     Filters = {
         ["平民"] = true, ["警察"] = true, ["医生"] = true,
         ["消防员"] = true, ["厨师"] = true, ["快递员"] = true,
-        ["农夫"] = true, ["囚犯"] = true, ["其他"] = true
+        ["农夫"] = true, ["囚犯"] = true, ["中转"] = true -- 替换为“中转”
     }
 }
 
@@ -328,7 +328,7 @@ local page_Visual = CreatePage("视觉")
 AddCard(page_Visual, "玩家透视", "ESP")
 AddCard(page_Visual, "人物高亮", "Highlight")
 AddMultiSelect(page_Visual, "阵营过滤 (点击展开)", 
-    {"平民", "警察", "医生", "消防员", "厨师", "快递员", "农夫", "囚犯", "其他"}, 
+    {"平民", "警察", "医生", "消防员", "厨师", "快递员", "农夫", "囚犯", "中转"}, 
     Config.Filters
 )
 SwitchPage("视觉")
@@ -427,8 +427,8 @@ PlayIntroAnimation()
 local RoleDict = {
     ["Civilian"] = "平民", ["Police"] = "警察", ["Medical"] = "医生",
     ["Chef"] = "厨师", ["Delivery"] = "快递员", ["Farmer"] = "农夫",
-    ["Fire"] = "消防员", ["Prisoner"] = "囚犯", ["Road Service"] = "其他",
-    ["Transit"] = "其他", ["Neutral"] = "其他", ["???"] = "其他"
+    ["Fire"] = "消防员", ["Prisoner"] = "囚犯", ["Road Service"] = "中转",
+    ["Transit"] = "中转", ["Neutral"] = "中转", ["???"] = "中转"
 }
 
 local function getRoleName(plr)
@@ -444,7 +444,7 @@ local function getRoleName(plr)
         elseif lr:find("medical") or lr:find("doctor") then return "医生"
         elseif lr:find("fire") then return "消防员"
         end
-        return "其他"
+        return "中转" -- 替换兜底
     end
     return "平民"
 end
@@ -456,6 +456,7 @@ local function getRoleColor(roleName)
     elseif roleName == "平民" then return Color3.fromRGB(255, 255, 255)
     elseif roleName == "农夫" then return Color3.fromRGB(60, 255, 60)
     elseif roleName == "囚犯" then return Color3.fromRGB(255, 100, 0)
+    elseif roleName == "中转" then return Color3.fromRGB(150, 150, 150) -- 中转灰色
     end
     return Color3.fromRGB(200, 200, 200)
 end
@@ -564,4 +565,4 @@ task.spawn(function()
     end
 end)
 
-print("[DeepSeek] 纯净多选阵营版加载完毕")
+print("[DeepSeek] 中转版加载完毕")
