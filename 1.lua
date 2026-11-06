@@ -1,5 +1,5 @@
 -- ============================================
--- DeepSeek Studio (真·状态篡改 + 子弹包篡改杀戮)
+-- DeepSeek Studio (UI补全 · 真实伪造包杀戮)
 -- ============================================
 
 local Players = game:GetService("Players")
@@ -20,31 +20,14 @@ mainGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 mainGui.Parent = container
 
 local Config = { 
-    ESP = false, 
-    Highlight = false,
-    NetworkCapture = false,
-    InfiniteFood = false,
-    KillAura = false,
-    KillRange = 50,
-    Filters = {
-        ["平民"] = true, ["警察"] = true, ["医生"] = true,
-        ["消防员"] = true, ["厨师"] = true, ["快递员"] = true,
-        ["农夫"] = true, ["囚犯"] = true, ["中转"] = true
-    }
+    ESP = false, Highlight = false, NetworkCapture = false, InfiniteFood = false, KillAura = false, KillRange = 50,
+    Filters = { ["平民"] = true, ["警察"] = true, ["医生"] = true, ["消防员"] = true, ["厨师"] = true, ["快递员"] = true, ["农夫"] = true, ["囚犯"] = true, ["中转"] = true }
 }
 
-local Colors = {
-    Bg = Color3.fromRGB(240, 242, 245),
-    Panel = Color3.fromRGB(255, 255, 255),
-    Sidebar = Color3.fromRGB(235, 237, 240),
-    TextDark = Color3.fromRGB(30, 30, 30),
-    TextLight = Color3.fromRGB(120, 120, 120),
-    AccentBlue = Color3.fromRGB(0, 110, 255),
-    ToggleOff = Color3.fromRGB(200, 200, 200),
-}
+local Colors = { Bg = Color3.fromRGB(240, 242, 245), Panel = Color3.fromRGB(255, 255, 255), Sidebar = Color3.fromRGB(235, 237, 240), TextDark = Color3.fromRGB(30, 30, 30), TextLight = Color3.fromRGB(120, 120, 120), AccentBlue = Color3.fromRGB(0, 110, 255), ToggleOff = Color3.fromRGB(200, 200, 200) }
 
 -- ==========================================
--- UI 基础构建 (修复排版)
+-- UI 构建 (补全所有元素)
 -- ==========================================
 local Main = Instance.new("Frame")
 Main.AnchorPoint = Vector2.new(0.5, 0)
@@ -61,14 +44,26 @@ local CapsuleText = Instance.new("TextLabel", Main); CapsuleText.Size = UDim2.ne
 local CapsuleBtn = Instance.new("TextButton", Main); CapsuleBtn.Size = UDim2.fromScale(1, 1); CapsuleBtn.BackgroundTransparency = 1; CapsuleBtn.Text = ""
 
 local MainContent = Instance.new("Frame", Main); MainContent.Size = UDim2.fromScale(1, 1); MainContent.BackgroundTransparency = 1; MainContent.Visible = false
+
+-- 【补全】标题和关闭按钮
+local Title = Instance.new("TextLabel", MainContent); Title.Size = UDim2.fromOffset(200, 30); Title.Position = UDim2.fromOffset(16, 5); Title.BackgroundTransparency = 1; Title.Text = "DeepSeek Studio"; Title.TextColor3 = Colors.TextDark; Title.Font = Enum.Font.GothamBold; Title.TextSize = 14; Title.TextXAlignment = Enum.TextXAlignment.Left
+local CloseBtn = Instance.new("TextButton", MainContent); CloseBtn.Size = UDim2.fromOffset(32, 32); CloseBtn.Position = UDim2.new(1, -40, 0, 4); CloseBtn.BackgroundTransparency = 1; CloseBtn.Text = "×"; CloseBtn.TextColor3 = Colors.TextLight; CloseBtn.Font = Enum.Font.GothamBold; CloseBtn.TextSize = 20; CloseBtn.ZIndex = 10
+
+-- 侧边栏
 local Sidebar = Instance.new("Frame", MainContent); Sidebar.Size = UDim2.fromOffset(120, 250); Sidebar.Position = UDim2.fromOffset(8, 40); Sidebar.BackgroundColor3 = Colors.Sidebar; Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 10)
 local NavContainer = Instance.new("Frame", Sidebar); NavContainer.Size = UDim2.new(1, 0, 1, 0); NavContainer.BackgroundTransparency = 1; Instance.new("UIListLayout", NavContainer).Padding = UDim.new(0, 4)
-local ContentFrame = Instance.new("Frame", MainContent); ContentFrame.Size = UDim2.new(1, -136, 1, -50); ContentFrame.Position = UDim2.fromOffset(128, 40); ContentFrame.BackgroundTransparency = 1
 
+-- 【补全】左下角用户信息
+local UserFrame = Instance.new("Frame", Sidebar); UserFrame.Size = UDim2.new(1, -16, 0, 44); UserFrame.Position = UDim2.new(0, 8, 1, -52); UserFrame.BackgroundColor3 = Colors.Panel; Instance.new("UICorner", UserFrame).CornerRadius = UDim.new(0, 8)
+local Avatar = Instance.new("ImageLabel", UserFrame); Avatar.Size = UDim2.fromOffset(30, 30); Avatar.Position = UDim2.fromOffset(7, 7); Avatar.BackgroundColor3 = Colors.Bg; Instance.new("UICorner", Avatar).CornerRadius = UDim.new(1, 0)
+task.spawn(function() local ok, url = pcall(function() return Players:GetUserThumbnailAsync(LP.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size150x150) end) if ok then Avatar.Image = url end end)
+local UserName = Instance.new("TextLabel", UserFrame); UserName.Size = UDim2.new(1, -44, 0, 14); UserName.Position = UDim2.fromOffset(44, 7); UserName.BackgroundTransparency = 1; UserName.Text = LP.DisplayName; UserName.TextColor3 = Colors.TextDark; UserName.Font = Enum.Font.GothamBold; UserName.TextSize = 11; UserName.TextXAlignment = Enum.TextXAlignment.Left
+
+-- 内容区
+local ContentFrame = Instance.new("Frame", MainContent); ContentFrame.Size = UDim2.new(1, -136, 1, -50); ContentFrame.Position = UDim2.fromOffset(128, 40); ContentFrame.BackgroundTransparency = 1
 local Pages, NavButtons = {}, {}
 local function CreatePage(name)
     local sf = Instance.new("ScrollingFrame", ContentFrame); sf.Size = UDim2.new(1, 0, 1, 0); sf.BackgroundTransparency = 1; sf.BorderSizePixel = 0; sf.ScrollBarThickness = 3; sf.CanvasSize = UDim2.new(0, 0, 0, 0); sf.AutomaticCanvasSize = Enum.AutomaticSize.Y; sf.Visible = false
-    -- 修复排版：添加 UIPadding 确保卡片不贴边
     local layout = Instance.new("UIListLayout", sf); layout.Padding = UDim.new(0, 8)
     local padding = Instance.new("UIPadding", sf); padding.PaddingRight = UDim.new(0, 10); padding.PaddingTop = UDim.new(0, 5)
     Pages[name] = sf; return sf
@@ -111,6 +106,7 @@ local function ToggleUI(openState)
     isAnimating = false
 end
 CapsuleBtn.MouseButton1Click:Connect(function() ToggleUI(true) end)
+CloseBtn.MouseButton1Click:Connect(function() ToggleUI(false) end)
 
 -- ==========================================
 -- 日志系统
@@ -130,11 +126,82 @@ _G.CaptureLogUI = function()
 end
 
 -- ==========================================
--- 【核心】底层包拦截与篡改 (终于对了)
+-- 无限状态本地锁 (双保险)
 -- ==========================================
-local lastFireTime = 0
-local hasHooked = false
+task.spawn(function()
+    while task.wait(0.5) do
+        if Config.InfiniteFood then
+            pcall(function()
+                local p = LP
+                local char = p.Character
+                local keys = {"Stamina", "Energy", "Endurance", "Hunger", "Food", "stamina", "food"}
+                for _, k in ipairs(keys) do
+                    if type(p:GetAttribute(k)) == "number" then p:SetAttribute(k, 100) end
+                    if char and type(char:GetAttribute(k)) == "number" then char:SetAttribute(k, 100) end
+                end
+                if char then
+                    for _, v in ipairs(char:GetDescendants()) do
+                        if (v:IsA("NumberValue") or v:IsA("IntValue")) and (v.Name:lower():find("stamina") or v.Name:lower():find("food")) then
+                            v.Value = 100
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
 
+-- ==========================================
+-- 真实伪造包杀戮 & 状态拦截
+-- ==========================================
+local lastKillTime = 0
+local PE = game:GetService("ReplicatedStorage"):WaitForChild("Remote", 5) and game:GetService("ReplicatedStorage").Remote:FindFirstChild("PlayerEvent") or nil
+
+-- 主动伪造发包逻辑
+local function ExecuteKillAura()
+    if not Config.KillAura or not PE then return end
+    local myChar = LP.Character
+    local myHRP = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local tool = myChar and myChar:FindFirstChildOfClass("Tool")
+    if not myHRP or not tool then return end
+    
+    local now = tick()
+    if now - lastKillTime < 0.2 then return end
+    lastKillTime = now
+    
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LP and plr.Character then
+            local tgtHRP = plr.Character:FindFirstChild("HumanoidRootPart")
+            local tgtHead = plr.Character:FindFirstChild("Head")
+            local tgtHum = plr.Character:FindFirstChildOfClass("Humanoid")
+            
+            if tgtHRP and tgtHead and tgtHum and tgtHum.Health > 0 then
+                local dist = (myHRP.Position - tgtHRP.Position).Magnitude
+                if dist <= (Config.KillRange * 3) then
+                    -- 构造伪造的 bullet 包
+                    local fakeBullet = {
+                        weaponName = tool.Name,
+                        posDestroyX = math.random(3000, 3500),
+                        pos = tgtHead.Position
+                    }
+                    pcall(function()
+                        PE:FireServer("bullet", fakeBullet)
+                    end)
+                end
+            end
+        end
+    end
+end
+
+-- 循环执行杀戮
+task.spawn(function()
+    while task.wait(0.2) do
+        pcall(ExecuteKillAura)
+    end
+end)
+
+-- Hook 拦截状态包和你的原本开枪包
+local hasHooked = false
 local function SetupHook()
     if hasHooked or not hookmetamethod then return end
     hasHooked = true
@@ -143,78 +210,51 @@ local function SetupHook()
     oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
         local method = getnamecallmethod()
         
-        -- 所有的网络请求都走这里，事件名统一是 "PlayerEvent"
         if not checkcaller() and method == "FireServer" and self.Name == "PlayerEvent" then
             local args = {...}
             local action = args[1]
             
-            -- 1. 无限状态 (setStaminaOrFood, stamina, 94)
+            -- 1. 拦截状态
             if Config.InfiniteFood and action == "setStaminaOrFood" then
-                -- 参数 2 是 "stamina" 或 "food"，参数 3 是数值
                 if args[2] == "stamina" or args[2] == "food" then
-                    args[3] = 100 -- 直接把数值改成 100
+                    args[3] = 100
                 end
                 return oldNamecall(self, unpack(args))
             end
             
-            -- 2. 杀戮 & 子弹追踪 (bullet, table)
+            -- 2. 拦截你的子弹包改方向
             if Config.KillAura and action == "bullet" then
-                local now = tick()
-                if now - lastFireTime < 0.1 then return oldNamecall(self, ...) end -- 稍微限制，防踢
-                lastFireTime = now
-                
                 local bulletData = args[2]
-                -- 验证数据是 table 且包含 pos 位置信息
                 if type(bulletData) == "table" and bulletData.pos then
                     local myHRP = LP.Character and LP.Character:FindFirstChild("HumanoidRootPart")
                     if myHRP then
                         local targetsHit = false
-                        
-                        -- 遍历范围内的所有人
                         for _, plr in ipairs(Players:GetPlayers()) do
                             if plr ~= LP and plr.Character then
                                 local tgtHRP = plr.Character:FindFirstChild("HumanoidRootPart")
                                 local tgtHead = plr.Character:FindFirstChild("Head")
                                 local tgtHum = plr.Character:FindFirstChildOfClass("Humanoid")
-                                
                                 if tgtHRP and tgtHead and tgtHum and tgtHum.Health > 0 then
                                     local dist = (myHRP.Position - tgtHRP.Position).Magnitude
                                     if dist <= (Config.KillRange * 3) then
                                         targetsHit = true
-                                        -- 浅拷贝原始的 table，防止污染
                                         local newData = {}
                                         for k, v in pairs(bulletData) do newData[k] = v end
-                                        
-                                        -- 【终极篡改】把子弹落点改成敌人的头部坐标！
                                         newData.pos = tgtHead.Position
-                                        
-                                        -- 异步把篡改后的子弹包疯狂发出去
-                                        task.spawn(function()
-                                            pcall(function()
-                                                self:FireServer("bullet", newData)
-                                            end)
-                                        end)
-                                        
-                                        task.wait(0.01) -- 稍微给服务器一点处理时间
+                                        task.spawn(function() pcall(function() self:FireServer("bullet", newData) end) end)
+                                        task.wait(0.01)
                                     end
                                 end
                             end
                         end
-                        
-                        if targetsHit then
-                            -- 吞掉原本打空地的包，不发给服务器
-                            return 
-                        end
+                        if targetsHit then return end
                     end
                 end
             end
             
-            -- 3. 抓包日志
+            -- 3. 抓包
             if Config.NetworkCapture then
-                local name = self.Name
-                if action == "charRot" or action == "humFloor" or action == "humState" then 
-                    -- 过滤高频垃圾
-                else
+                if action ~= "charRot" and action ~= "humFloor" and action ~= "humState" then
                     task.spawn(function()
                         pcall(function()
                             local argStr = ""
@@ -226,7 +266,7 @@ local function SetupHook()
                                 elseif typeof(v) == "string" then argStr = argStr .. '"' .. v .. '", '
                                 else argStr = argStr .. tostring(v) .. ", " end
                             end
-                            local logLine = "[" .. name .. "] " .. argStr
+                            local logLine = "[" .. self.Name .. "] " .. argStr
                             table.insert(captureLogs, 1, logLine)
                             if #captureLogs > 30 then table.remove(captureLogs) end
                             if logText and logWindow and logWindow.Parent then logText.Text = table.concat(captureLogs, "\n") end
@@ -242,7 +282,7 @@ end
 SetupHook()
 
 -- ==========================================
--- 启动动画与透视 (原样保留)
+-- 启动动画与透视
 -- ==========================================
 local function PlayIntroAnimation()
     local particles = {}
@@ -263,10 +303,8 @@ end
 PlayIntroAnimation()
 
 local RoleDict = {
-    ["Civilian"] = "平民", ["Police"] = "警察", ["Medical"] = "医生",
-    ["Chef"] = "厨师", ["Delivery"] = "快递员", ["Farmer"] = "农夫",
-    ["Fire"] = "消防员", ["Prisoner"] = "囚犯", ["Road Service"] = "中转",
-    ["Transit"] = "中转", ["Neutral"] = "中转", ["???"] = "中转"
+    ["Civilian"] = "平民", ["Police"] = "警察", ["Medical"] = "医生", ["Chef"] = "厨师", ["Delivery"] = "快递员", ["Farmer"] = "农夫",
+    ["Fire"] = "消防员", ["Prisoner"] = "囚犯", ["Road Service"] = "中转", ["Transit"] = "中转", ["Neutral"] = "中转", ["???"] = "中转"
 }
 
 local function getRoleName(plr)
@@ -404,4 +442,4 @@ task.spawn(function()
     end
 end)
 
-print("[DeepSeek] 真实底层包篡改版加载完毕")
+print("[DeepSeek] 伪造杀戮+UI补全版加载完毕")
